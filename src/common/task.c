@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "sha256.h"
+#include "md5.h"
 #include "utarray.h"
 
 #include "task.h"
@@ -100,15 +100,14 @@ task_id compute_task_id(task_spec *spec) {
     DCHECK(object_ids_equal(*task_return_ptr(spec, i), NIL_ID));
   }
   /* Compute a SHA256 hash of the task_spec. */
-  SHA256_CTX ctx;
-  BYTE buff[SHA256_BLOCK_SIZE];
-  sha256_init(&ctx);
-  sha256_update(&ctx, (BYTE *) spec, task_spec_size(spec));
-  sha256_final(&ctx, buff);
+  MD5_CTX md5_context;
+  MD5Init(&md5_context);
+  MD5Update(&md5_context, (unsigned char *) spec, task_spec_size(spec));
+  MD5Final(&md5_context);
   /* Create a task ID out of the hash. This will truncate the hash. */
-  task_id task_id;
-  CHECK(sizeof(task_id) <= SHA256_BLOCK_SIZE);
-  memcpy(&task_id.id, buff, sizeof(task_id));
+  task_id task_id = NIL_TASK_ID;
+  CHECK(sizeof(task_id) >= sizeof(md5_context.digest));
+  memcpy(&task_id.id, md5_context.digest, sizeof(md5_context.digest));
   return task_id;
 }
 
@@ -153,14 +152,6 @@ void finish_construct_task_spec(task_spec *spec) {
   for (int64_t i = 0; i < spec->num_returns; ++i) {
     *task_return_ptr(spec, i) = compute_return_id(spec->task_id, i);
   }
-}
-
-task_spec *alloc_nil_task_spec(task_id task_id) {
-  task_spec *spec =
-      start_construct_task_spec(NIL_ID, 0, NIL_FUNCTION_ID, 0, 0, 0);
-  finish_construct_task_spec(spec);
-  spec->task_id = task_id;
-  return spec;
 }
 
 int64_t task_spec_size(task_spec *spec) {
@@ -303,13 +294,6 @@ task *alloc_task(task_spec *spec, scheduling_state state, node_id node) {
   result->node = node;
   memcpy(&result->spec, spec, task_spec_size(spec));
   return result;
-}
-
-task *alloc_nil_task(task_id task_id) {
-  task_spec *nil_spec = alloc_nil_task_spec(task_id);
-  task *nil_task = alloc_task(nil_spec, 0, NIL_ID);
-  free_task_spec(nil_spec);
-  return nil_task;
 }
 
 int64_t task_size(task *task_arg) {

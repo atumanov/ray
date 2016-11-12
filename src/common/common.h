@@ -58,6 +58,8 @@
  *  and is responsible for freeing it. */
 #define OWNER
 
+#define MD5_BLOCK_SIZE 64
+
 #define UNIQUE_ID_SIZE 20
 
 #define UNIQUE_ID_EQ(id1, id2) (memcmp((id1).id, (id2).id, UNIQUE_ID_SIZE) == 0)
