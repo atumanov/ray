@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -g -Wall -Wno-typedef-redefinition --std=c99 -D_XOPEN_SOURCE=500 -D_POSIX_C_SOURCE=200809L -fPIC -I. -Ithirdparty -Ithirdparty/ae
 BUILD = build
 
-all: hiredis $(BUILD)/libcommon.a
+all: hiredis redis $(BUILD)/libcommon.a
 
 $(BUILD)/libcommon.a: event_loop.o common.o task.o io.o state/redis.o state/table.o state/object_table.o state/task_table.o thirdparty/ae/ae.o thirdparty/sha256.o
 	ar rcs $@ $^
@@ -40,15 +40,7 @@ hiredis:
 
 test: CFLAGS += -DRAY_COMMON_LOG_LEVEL=4
 test: hiredis redis $(BUILD)/common_tests $(BUILD)/task_table_tests $(BUILD)/object_table_tests $(BUILD)/db_tests $(BUILD)/io_tests $(BUILD)/task_tests $(BUILD)/redis_tests FORCE
-	./thirdparty/redis-3.2.3/src/redis-server &
-	sleep 1s
-	./build/common_tests
-	./build/db_tests
-	./build/io_tests
-	./build/task_tests
-	./build/redis_tests
-	./build/task_table_tests
-	./build/object_table_tests
+	./test/run_tests.sh
 
 valgrind: test
 	valgrind --leak-check=full --error-exitcode=1 ./build/common_tests
