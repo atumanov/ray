@@ -168,4 +168,9 @@ void redis_task_table_publish_publish_callback(redisAsyncContext *c,
  */
 void redis_task_table_subscribe(table_callback_data *callback_data);
 
+/**
+ * TODO
+ */
+void redis_local_scheduler_table_subscribe(table_callback_data *callback_data);
+
 #endif /* REDIS_H */

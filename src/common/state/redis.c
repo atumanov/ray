@@ -9,6 +9,7 @@
 
 #include "common.h"
 #include "db.h"
+#include "local_scheduler_table.h"
 #include "object_table.h"
 #include "task.h"
 #include "task_table.h"
@@ -54,7 +55,6 @@ db_handle *db_connect(const char *address,
   db_handle *db = malloc(sizeof(db_handle));
   /* Sync connection for initial handshake */
   redisReply *reply;
-  long long num_clients;
   redisContext *context = redisConnect(address, port);
   CHECK_REDIS_CONNECT(redisContext, context, "could not connect to redis %s:%d",
                       address, port);
@@ -64,12 +64,16 @@ db_handle *db_connect(const char *address,
     reply = redisCommand(context, "WATCH %s", client_type);
     freeReplyObject(reply);
     reply = redisCommand(context, "HLEN %s", client_type);
-    num_clients = reply->integer;
     freeReplyObject(reply);
     reply = redisCommand(context, "MULTI");
     freeReplyObject(reply);
-    reply = redisCommand(context, "HMSET %s address %s:%d client_id %b", client_type,
-                         client_addr, client_port, (char *) client.id, sizeof(unique_id));
+    reply = redisCommand(context, "HMSET %s:%b address %s:%d client_id %b",
+                         client_type, (char *) client.id, sizeof(client_id),
+                         client_addr, client_port, (char *) client.id,
+                         sizeof(client_id));
+    freeReplyObject(reply);
+    reply = redisCommand(context, "PUBLISH %s %b", client_type,
+                         (char *) client.id, sizeof(client_id));
     freeReplyObject(reply);
     reply = redisCommand(context, "EXEC");
     CHECK(reply);
@@ -81,9 +85,7 @@ db_handle *db_connect(const char *address,
   }
 
   db->client_type = strdup(client_type);
-  printf("XXX\n");
   db->client = client;
-  printf("YYY\n");
   db->service_cache = NULL;
   db->sync_context = context;
   utarray_new(db->callback_freelist, &ut_ptr_icd);
@@ -630,6 +632,10 @@ void redis_task_table_subscribe(table_callback_data *callback_data) {
                           "PSUBSCRIBE task:*:%d", data->state_filter);
   } else {
     node_id node = data->node;
+    if (IS_NIL2_ID(data->node)) {
+      /* In this case, set the node ID to be the ID of this client. */
+      node = (node_id) db->client;
+    }
     status = redisAsyncCommand(
         db->sub_context, redis_task_table_subscribe_callback,
         (void *) callback_data->timer_id, "SUBSCRIBE task:%b:%d",
@@ -637,6 +643,55 @@ void redis_task_table_subscribe(table_callback_data *callback_data) {
   }
   if ((status == REDIS_ERR) || db->sub_context->err) {
     LOG_REDIS_DEBUG(db->sub_context, "error in task_table_register_callback");
+  }
+}
+
+/*
+ *  ==== local scheduler table callbacks ====
+ */
+
+void redis_local_scheduler_table_subscribe_callback(redisAsyncContext *c,
+                                                    void *r,
+                                                    void *privdata) {
+  REDIS_CALLBACK_HEADER(db, callback_data, r)
+  redisReply *reply = r;
+
+  CHECK(reply->type == REDIS_REPLY_ARRAY);
+  /* If this condition is true, we got the initial message that acknowledged the
+   * subscription. */
+  CHECK(reply->elements > 2);
+  /* First entry is message type, then possibly the regex we psubscribed to,
+   * then topic, then payload. */
+  redisReply *payload = reply->element[reply->elements - 1];
+  if (payload->str == NULL) {
+    if (callback_data->done_callback) {
+      local_scheduler_table_done_callback done_callback = callback_data->done_callback;
+      done_callback(callback_data->id, callback_data->user_context);
+    }
+    /* Note that we do not destroy the callback data yet because the
+     * subscription callback needs this data. */
+    event_loop_remove_timer(db->loop, callback_data->timer_id);
+    return;
+  }
+  /* Otherwise, parse the payload and call the callback. */
+  local_scheduler_table_subscribe_data *data = callback_data->data;
+
+  client_id client;
+  memcpy(client.id, payload->str, payload->len);
+  if (data->subscribe_callback) {
+    data->subscribe_callback(client, data->subscribe_context);
+  }
+}
+
+void redis_local_scheduler_table_subscribe(table_callback_data *callback_data) {
+  db_handle *db = callback_data->db_handle;
+  local_scheduler_table_subscribe_data *data = callback_data->data;
+  int status =
+      redisAsyncCommand(db->sub_context, redis_local_scheduler_table_subscribe_callback,
+                        (void *) callback_data->timer_id,
+                        "SUBSCRIBE photon");
+  if ((status == REDIS_ERR) || db->sub_context->err) {
+    LOG_REDIS_DEBUG(db->sub_context, "error in local_scheduler_table_register_callback");
   }
 }
 

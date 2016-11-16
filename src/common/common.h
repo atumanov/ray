@@ -93,12 +93,14 @@
 #define UNIQUE_ID_EQ(id1, id2) (memcmp((id1).id, (id2).id, UNIQUE_ID_SIZE) == 0)
 
 #define IS_NIL_ID(id) UNIQUE_ID_EQ(id, NIL_ID)
+#define IS_NIL2_ID(id) UNIQUE_ID_EQ(id, NIL2_ID) // TODO(rkn): Remove this.
 
 typedef struct { unsigned char id[UNIQUE_ID_SIZE]; } unique_id;
 
 extern const UT_icd object_id_icd;
 
 extern const unique_id NIL_ID;
+extern const unique_id NIL2_ID;
 
 /* Generate a globally unique ID. */
 unique_id globally_unique_id(void);

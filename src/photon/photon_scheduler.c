@@ -203,7 +203,7 @@ void start_server(const char *socket_name,
       .timeout = 100,
       .fail_callback = NULL,
   };
-  task_table_subscribe(g_state->scheduler_info->db, NIL_ID,
+  task_table_subscribe(g_state->scheduler_info->db, NIL2_ID,
                        TASK_STATUS_SCHEDULED, handle_task_scheduled_callback,
                        NULL, &retry, NULL, NULL);
   /* Run event loop. */

@@ -36,6 +36,11 @@ void handle_local_scheduler_heartbeat(void) {
   /* Do nothing for now. */
 }
 
-void handle_new_local_scheduler(void) {
+void handle_new_local_scheduler(client_id client_id, void *user_context) {
   /* Do nothing for now. */
+  printf("GOT A NEW LOCAL SCHEDULER, CLIENT ID ");
+  for (int i = 0; i < 20; ++i) {
+    printf("%c", client_id.id[i]);
+  }
+  printf("\n");
 }

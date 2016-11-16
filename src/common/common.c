@@ -12,6 +12,11 @@ const UT_icd object_id_icd = {sizeof(object_id), NULL, NULL, NULL};
 const unique_id NIL_ID = {{255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
                            255, 255, 255, 255, 255, 255, 255, 255, 255, 255}};
 
+// REMOVE THIS.
+const unique_id NIL2_ID = {{254, 254, 254, 254, 254, 254, 254, 254, 254, 254,
+                            254, 254, 254, 254, 254, 254, 254, 254, 254, 254}};
+
+
 unique_id globally_unique_id(void) {
   /* Use /dev/urandom for "real" randomness. */
   int fd;

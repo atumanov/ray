@@ -7,6 +7,7 @@
 #include "event_loop.h"
 #include "global_scheduler_algorithm.h"
 #include "global_scheduler_shared.h"
+#include "local_scheduler_table.h"
 #include "net.h"
 #include "table.h"
 #include "task_table.h"
@@ -48,13 +49,12 @@ void start_server(const char* redis_addr, int redis_port) {
       .timeout = 100,
       .fail_callback = NULL,
   };
-  /*Subscribe to notifications about local schedulers. */
-  //local_scheduler_subscribe(state->db, handle_new_local_scheduler, NULL, &retry,
-  //                          NULL, NULL);
   ///* Subscribe to notifications from the object table. */
   //object_table_subscribe(state->db, NIL_OBJECT_ID, handle_object_available,
   //                       NULL, &retry, NULL, NULL);
-  /*Subscribe to notifications about waiting tasks. */
+  /* Subscribe to notifications about new local schedulers. */
+  local_scheduler_table_subscribe(state->db, handle_new_local_scheduler, (void *) state, &retry, NULL, NULL);
+  /* Subscribe to notifications about waiting tasks. */
   task_table_subscribe(state->db, NIL_ID, TASK_STATUS_WAITING,
                        handle_task_waiting, (void *) state, &retry, NULL, NULL);
   /* Start the event loop. */
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
       redis_addr_port = optarg;
       break;
     default:
-      LOG_ERR("unknown option %c", c);
+      LOG_ERROR("unknown option %c", c);
       exit(-1);
     }
   }
@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
   int redis_port;
   if (!redis_addr_port ||
       parse_ip_addr_port(redis_addr_port, redis_addr, &redis_port) == -1) {
-    LOG_ERR("need to specify redis address like 127.0.0.1:6379 with -r switch");
+    LOG_ERROR("need to specify redis address like 127.0.0.1:6379 with -r switch");
     exit(-1);
   }
   start_server(redis_addr, redis_port);

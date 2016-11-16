@@ -33,6 +33,6 @@ void handle_object_unavailable(object_id obj_id);
 
 void handle_local_scheduler_heartbeat(void);
 
-void handle_new_local_scheduler(void);
+void handle_new_local_scheduler(client_id client_id, void *user_context);
 
 #endif /* GLOBAL_SCHEDULER_ALGORITHM_H */
