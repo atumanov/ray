@@ -48,13 +48,13 @@ void start_server(const char* redis_addr, int redis_port) {
       .timeout = 100,
       .fail_callback = NULL,
   };
-  /* Subscribe to notifications about local schedulers. */
-  // local_scheduler_subscribe(state->db, handle_new_local_scheduler, NULL, &retry,
-  //                           NULL, NULL);
-  // /* Subscribe to notifications from the object table. */
-  // object_table_subscribe(state->db, NIL_OBJECT_ID, handle_object_available,
-  //                        NULL, &retry, NULL, NULL);
-  /* Subscribe to notifications about waiting tasks. */
+  /*Subscribe to notifications about local schedulers. */
+  //local_scheduler_subscribe(state->db, handle_new_local_scheduler, NULL, &retry,
+  //                          NULL, NULL);
+  ///* Subscribe to notifications from the object table. */
+  //object_table_subscribe(state->db, NIL_OBJECT_ID, handle_object_available,
+  //                       NULL, &retry, NULL, NULL);
+  /*Subscribe to notifications about waiting tasks. */
   task_table_subscribe(state->db, NIL_ID, TASK_STATUS_WAITING,
                        handle_task_waiting, (void *) state, &retry, NULL, NULL);
   /* Start the event loop. */

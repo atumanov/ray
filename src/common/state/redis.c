@@ -59,6 +59,7 @@ db_handle *db_connect(const char *address,
   CHECK_REDIS_CONNECT(redisContext, context, "could not connect to redis %s:%d",
                       address, port);
   /* Add new client using optimistic locking. */
+  unique_id client_id = globally_unique_id();
   while (1) {
     reply = redisCommand(context, "WATCH %s", client_type);
     freeReplyObject(reply);
@@ -67,8 +68,8 @@ db_handle *db_connect(const char *address,
     freeReplyObject(reply);
     reply = redisCommand(context, "MULTI");
     freeReplyObject(reply);
-    reply = redisCommand(context, "HSET %s %lld %s:%d", client_type,
-                         num_clients, client_addr, client_port);
+    reply = redisCommand(context, "HMSET %s address %s:%d client_id %b", client_type,
+                         client_addr, client_port, (char *) client_id.id, sizeof(unique_id));
     freeReplyObject(reply);
     reply = redisCommand(context, "EXEC");
     CHECK(reply);
@@ -80,7 +81,7 @@ db_handle *db_connect(const char *address,
   }
 
   db->client_type = strdup(client_type);
-  db->client_id = num_clients;
+  //db->client_id = num_clients;
   db->service_cache = NULL;
   db->sync_context = context;
   utarray_new(db->callback_freelist, &ut_ptr_icd);
@@ -200,10 +201,17 @@ void redis_object_table_add(table_callback_data *callback_data) {
   CHECK(callback_data);
   db_handle *db = callback_data->db_handle;
   object_id id = callback_data->id;
+  // int status =
+  //     redisAsyncCommand(db->context, redis_object_table_add_callback,
+  //                       (void *) callback_data->timer_id, "SADD obj:%b %d",
+  //                       id.id, sizeof(object_id), db->client_id);
+
+  unique_id asdf = globally_unique_id();
   int status =
       redisAsyncCommand(db->context, redis_object_table_add_callback,
-                        (void *) callback_data->timer_id, "SADD obj:%b %d",
-                        id.id, sizeof(object_id), db->client_id);
+                        (void *) callback_data->timer_id, "SADD obj:%b %b",
+                        id.id, sizeof(object_id), (char *) asdf.id, sizeof(asdf));
+
   if ((status == REDIS_ERR) || db->context->err) {
     LOG_REDIS_DEBUG(db->context, "could not add object_table entry");
   }
@@ -626,10 +634,10 @@ void redis_task_table_subscribe(table_callback_data *callback_data) {
   }
 }
 
-int get_client_id(db_handle *db) {
-  if (db) {
-    return db->client_id;
-  } else {
-    return -1;
-  }
-}
+// int get_client_id(db_handle *db) {
+//   if (db) {
+//     return db->client_id;
+//   } else {
+//     return -1;
+//   }
+// }

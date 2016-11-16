@@ -27,6 +27,6 @@ void db_disconnect(db_handle *db);
  * @returns int The client ID for this connection to the database. If
  *          this client has no connection to the database, returns -1.
  */
-int get_client_id(db_handle *db);
+// int get_client_id(db_handle *db);
 
 #endif

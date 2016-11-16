@@ -60,7 +60,7 @@ void ray_log(ray_logger *logger,
   utstring_new(origin_id);
   if (logger->is_direct) {
     db_handle *db = (db_handle *) logger->conn;
-    utstring_printf(origin_id, "%" PRId64 ":%s", db->client_id, "");
+    //utstring_printf(origin_id, "%" PRId64 ":%s", db->client_id, "");
     redisAsyncCommand(db->context, NULL, NULL, log_fmt,
                       utstring_body(timestamp), logger->client_type,
                       utstring_body(origin_id), log_levels[log_level],

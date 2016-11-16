@@ -22,8 +22,8 @@ typedef struct {
 struct db_handle {
   /** String that identifies this client type. */
   char *client_type;
-  /** Unique ID for this client within the type. */
-  int64_t client_id;
+  ///** Unique ID for this client within the type. */
+  //int64_t client_id;
   /** Redis context for this global state store connection. */
   redisAsyncContext *context;
   /** Redis context for "subscribe" communication.
