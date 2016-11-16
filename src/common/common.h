@@ -129,4 +129,6 @@ bool object_ids_equal(object_id first_id, object_id second_id);
  */
 bool object_id_is_nil(object_id id);
 
+typedef unique_id client_id;
+
 #endif

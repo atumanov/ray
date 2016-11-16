@@ -28,14 +28,16 @@ PYTHON_PHOTON_DIR="$PYTHON_DIR/photon"
 PYTHON_GLOBAL_SCHEDULER_DIR="$PYTHON_DIR/global_scheduler"
 
 pushd "$COMMON_DIR"
+  make clean
   make
-  make test
+  #make test
 popd
 cp "$COMMON_DIR/thirdparty/redis-3.2.3/src/redis-server" "$PYTHON_COMMON_DIR/thirdparty/redis-3.2.3/src/"
 
 pushd "$PLASMA_DIR"
+  make clean
   make
-  make test
+  #make test
   pushd "$PLASMA_DIR/build"
     cmake ..
     make install
@@ -47,6 +49,7 @@ cp "$PLASMA_DIR/lib/python/plasma.py" "$PYTHON_PLASMA_DIR/lib/python/"
 cp "$PLASMA_DIR/lib/python/libplasma.so" "$PYTHON_PLASMA_DIR/lib/python/"
 
 pushd "$PHOTON_DIR"
+  make clean
   make
   pushd "$PHOTON_DIR/build"
     cmake ..
@@ -57,6 +60,7 @@ cp "$PHOTON_DIR/build/photon_scheduler" "$PYTHON_PHOTON_DIR/build/"
 cp "$PHOTON_DIR/photon/libphoton.so" "$PYTHON_PHOTON_DIR/"
 
 pushd "$GLOBAL_SCHEDULER_DIR"
+  make clean
   make
 popd
 cp "$GLOBAL_SCHEDULER_DIR/build/global_scheduler" "$PYTHON_GLOBAL_SCHEDULER_DIR/build/"
