@@ -22,9 +22,11 @@ void assign_task_to_local_scheduler(global_scheduler_state *state,
   task *updated_task = alloc_task(task_task_spec(original_task),
                                   TASK_STATUS_SCHEDULED, node_id);
   retry_info retry = {
-      .num_retries = 0, .timeout = 0, .fail_callback = NULL,
+      .num_retries = 0,
+      .timeout = 100,
+      .fail_callback = NULL,
   };
-  task_table_add_task(state->db, updated_task, &retry, NULL, NULL);
+  task_table_update(state->db, updated_task, &retry, NULL, NULL);
   free_task(updated_task);
 }
 

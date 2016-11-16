@@ -8,7 +8,7 @@
 /** Contains all information that is associated with a local scheduler. */
 typedef struct {
   /** The ID of the local scheduler in Redis. */
-  int id;
+  client_id id;
 } local_scheduler;
 
 typedef struct scheduling_algorithm_state scheduling_algorithm_state;
