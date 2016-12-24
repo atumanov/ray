@@ -189,6 +189,26 @@ void handle_task_waiting(global_scheduler_state *state,
                                 " num_returns = %" PRId64 "\n",
          task_num_args(task_spec), task_num_returns(task_spec));
 
+  /* Add max_object_location as the expected location for all return objects. */
+  for (int i = 0; i< task_num_returns(task_spec); i++) {
+    if (task_arg_type(task_spec, i) != ARG_BY_REF) {
+      continue;
+    }
+    object_id return_object_id = task_return(task_spec, i);
+    /* Speculatively save the max_object_location : return_object_id in info
+     * cache. */
+    scheduler_object_info *obj_info_entry = NULL;
+    HASH_FIND(hh, state->scheduler_object_info_table, &return_object_id,
+              sizeof(return_object_id), obj_info_entry);
+    if (obj_info_entry == NULL) {
+      /* Create the entry in scheduler's object info cache. */
+      obj_info_entry = calloc(1, sizeof(scheduler_object_info));
+      obj_info_entry->object_id = return_object_id;
+      utarray_new(obj_info_entry->object_locations, &ut_str_icd);
+    }
+    utarray_push_back(obj_info_entry->object_locations, max_object_location);
+  }
+
   assign_task_to_local_scheduler(state, task, photon_id);
   free_object_size_hashmap(object_size_table);
 }
