@@ -481,7 +481,7 @@ class Worker(object):
         be object IDs or they can be values. If they are values, they
         must be serializable objecs.
     """
-    with log_span("ray:submit_task", worker=self):
+    with log_span("ray:submit_task", worker=self) as logger:
       check_main_thread()
       # Put large or complex arguments that are passed by value in the object
       # store first.
@@ -504,6 +504,8 @@ class Worker(object):
       # submitted by the current task so far.
       self.task_index += 1
       self.photon_client.submit(task)
+
+      logger.add_exit_content("task_id", task.task_id().hex())
 
       return task.returns()
 
@@ -798,6 +800,7 @@ def _init(address_info=None, start_ray_local=False, object_id_seed=None,
         "local_scheduler_socket_name": address_info["local_scheduler_socket_names"][0],
         }
   connect(driver_address_info, object_id_seed=object_id_seed, mode=driver_mode, worker=global_worker)
+  log_event("ray:begin")
   return address_info
 
 def init(node_ip_address=None, redis_address=None, start_ray_local=False,
@@ -849,6 +852,10 @@ def cleanup(worker=global_worker):
   clusters in the tests, but the import and exit only happen once.
   """
   disconnect(worker)
+  log_event("ray:end")
+  flush_log()
+  time.sleep(1)
+  worker.redis_client.save()
   worker.set_mode(None)
   worker.driver_export_counter = 0
   worker.worker_import_counter = 0
@@ -1200,6 +1207,7 @@ class RayLogSpan(object):
     self.event_type = event_type
     self.contents = contents
     self.worker = worker
+    self.exit_contents = None
 
   def __enter__(self):
     """Log the beginning of a span event."""
@@ -1207,18 +1215,30 @@ class RayLogSpan(object):
         contents=self.contents,
         kind=LOG_SPAN_START,
         worker=self.worker)
+    return self
 
   def __exit__(self, type, value, tb):
     """Log the end of a span event. Log any exception that occurred."""
     if type is None:
-      log(event_type=self.event_type, kind=LOG_SPAN_END, worker=self.worker)
+      log(event_type=self.event_type, contents=self.exit_contents, kind=LOG_SPAN_END, worker=self.worker)
     else:
+      contents = {
+          "type": str(type),
+          "value": value,
+          "traceback": traceback.format_exc()
+          }
+      if self.exit_contents is not None:
+        for key, value in self.exit_contents.items():
+          contents[key] = value
       log(event_type=self.event_type,
-          contents={"type": str(type),
-                    "value": value,
-                    "traceback": traceback.format_exc()},
+          contents=contents,
           kind=LOG_SPAN_END,
           worker=self.worker)
+
+  def add_exit_content(self, key, value):
+    if self.exit_contents is None:
+      self.exit_contents = {}
+    self.exit_contents[key] = value
 
 def log_span(event_type, contents=None, worker=global_worker):
   return RayLogSpan(event_type, contents=contents, worker=worker)
@@ -1271,7 +1291,8 @@ def get(objectid, worker=global_worker):
   Returns:
     A Python object or a list of Python objects.
   """
-  with log_span("ray:get", worker=worker):
+  with log_span("ray:get", worker=worker) as logger:
+    logger.add_exit_content("object_id", objectid.hex())
     check_main_thread()
     check_connected(worker)
 
@@ -1301,7 +1322,7 @@ def put(value, worker=global_worker):
   Returns:
     The object ID assigned to this value.
   """
-  with log_span("ray:put", worker=worker):
+  with log_span("ray:put", worker=worker) as logger:
     check_main_thread()
     check_connected(worker)
 
@@ -1311,6 +1332,9 @@ def put(value, worker=global_worker):
     object_id = photon.compute_put_id(worker.current_task_id, worker.put_index)
     worker.put_object(object_id, value)
     worker.put_index += 1
+
+    logger.add_exit_content("object_id", object_id.hex())
+    logger.add_exit_content("size", sys.getsizeof(value, 0))
     return object_id
 
 def wait(object_ids, num_returns=1, timeout=None, worker=global_worker):
@@ -1501,8 +1525,10 @@ def main_loop(worker=global_worker):
 
       contents = {"function_name": worker.function_names[function_id.id()],
                   "task_id": task.task_id().hex()}
-      with log_span("ray:task", contents=contents, worker=worker):
+      with log_span("ray:task", contents=contents, worker=worker) as logger:
         process_task(task)
+        return_object_ids = [object_id.hex() for object_id in task.returns()]
+        logger.add_exit_content("results", " ".join(return_object_ids))
 
     # Push all of the log events to the global state store.
     flush_log()
