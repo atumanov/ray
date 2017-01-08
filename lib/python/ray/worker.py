@@ -801,6 +801,7 @@ def _init(address_info=None, start_ray_local=False, object_id_seed=None,
         }
   connect(driver_address_info, object_id_seed=object_id_seed, mode=driver_mode, worker=global_worker)
   log_event("ray:begin")
+  global_worker.start = time.time()
   return address_info
 
 def init(node_ip_address=None, redis_address=None, start_ray_local=False,
@@ -854,6 +855,7 @@ def cleanup(worker=global_worker):
   disconnect(worker)
   log_event("ray:end")
   flush_log()
+  print("Took {} seconds".format(time.time() - worker.start))
   time.sleep(1)
   worker.redis_client.save()
   worker.set_mode(None)
@@ -1292,7 +1294,6 @@ def get(objectid, worker=global_worker):
     A Python object or a list of Python objects.
   """
   with log_span("ray:get", worker=worker) as logger:
-    logger.add_exit_content("object_id", objectid.hex())
     check_main_thread()
     check_connected(worker)
 
@@ -1304,6 +1305,8 @@ def get(objectid, worker=global_worker):
       for i, value in enumerate(values):
         if isinstance(value, RayTaskError):
           raise RayGetError(objectid[i], value)
+      objectids = [x.hex() for x in objectid]
+      logger.add_exit_content("object_ids", " ".join(objectids))
       return values
     else:
       value = worker.get_object(objectid)
@@ -1311,6 +1314,7 @@ def get(objectid, worker=global_worker):
         # If the result is a RayTaskError, then the task that created this object
         # failed, and we should propagate the error message here.
         raise RayGetError(objectid, value)
+      logger.add_exit_content("object_ids", objectid.hex())
       return value
 
 def put(value, worker=global_worker):
