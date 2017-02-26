@@ -163,6 +163,7 @@ add_custom_command(
 )
 
 add_custom_target(protocol_fbs DEPENDS ${FBS_OUTPUT_FILES})
+add_dependencies(protocol_fbs flatbuffers_ep)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --std=c99 -D_XOPEN_SOURCE=500 -D_POSIX_C_SOURCE=200809L")
 
@@ -194,6 +195,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++ -fPIC")
 
 add_library(plasmaprotocol STATIC
   plasma_protocol.cc)
+add_dependencies(plasmaprotocol protocol_fbs)
 
 target_link_libraries(plasmaprotocol ${FLATBUFFERS_STATIC_LIB})
 
