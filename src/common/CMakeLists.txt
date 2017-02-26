@@ -13,6 +13,29 @@ add_custom_target(
    COMMAND make
    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/thirdparty/hiredis)
 
+SET_SOURCE_FILES_PROPERTIES(
+  event_loop.c
+  common.c
+  task.c
+  io.c
+  net.c
+  logging.c
+  state/redis.c
+  state/table.c
+  state/object_table.c
+  state/task_table.c
+  state/db_client_table.c
+  state/actor_notification_table.c
+  state/local_scheduler_table.c
+  test/common_tests.c
+  test/db_tests.c
+  test/io_tests.c
+  test/object_table_tests.c
+  test/redis_tests.c
+  test/task_table_tests.c
+  test/task_tests.c
+  PROPERTIES LANGUAGE CXX)
+
 add_library(common STATIC
   event_loop.c
   common.c

@@ -35,6 +35,8 @@ add_library(photon_client STATIC photon_client.c)
 
 target_link_libraries(photon photon_client ${COMMON_LIB} ${PYTHON_LIBRARIES})
 
+SET_SOURCE_FILES_PROPERTIES(photon_algorithm.c photon_client.c photon_extension.c photon_scheduler.c PROPERTIES LANGUAGE CXX)
+
 add_executable(photon_scheduler photon_scheduler.c photon_algorithm.c)
 target_link_libraries(photon_scheduler photon_client common ${HIREDIS_LIB} plasma_lib)
 
