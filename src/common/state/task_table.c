@@ -35,7 +35,7 @@ void task_table_test_and_update(DBHandle *db_handle,
                                 int test_state_bitmask,
                                 int update_state,
                                 RetryInfo *retry,
-                                task_table_done_callback done_callback,
+                                task_table_get_callback done_callback,
                                 void *user_context) {
   TaskTableTestAndUpdateData *update_data =
       (TaskTableTestAndUpdateData *) malloc(sizeof(TaskTableTestAndUpdateData));

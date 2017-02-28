@@ -50,6 +50,8 @@ if(HAS_PLASMA)
   set(COMMON_EXTENSION ../common/lib/python/common_extension.c)
 endif()
 
+SET_SOURCE_FILES_PROPERTIES(../common/lib/python/common_extension.c PROPERTIES LANGUAGE CXX)
+
 add_definitions(-fPIC)
 
 add_library(numbuf SHARED

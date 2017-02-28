@@ -6,6 +6,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/Common.cmake)
 
 add_subdirectory(redis_module)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+
 include_directories(thirdparty/ae)
 
 add_custom_target(
@@ -27,6 +29,7 @@ SET_SOURCE_FILES_PROPERTIES(
   state/db_client_table.c
   state/actor_notification_table.c
   state/local_scheduler_table.c
+  lib/python/common_extension.c
   test/common_tests.c
   test/db_tests.c
   test/io_tests.c

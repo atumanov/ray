@@ -81,6 +81,19 @@ add_dependencies(plasma_store hiredis gen_plasma_fbs)
 
 target_link_libraries(plasma_store common ${FLATBUFFERS_STATIC_LIB})
 
+SET_SOURCE_FILES_PROPERTIES(
+  plasma_client.c
+  plasma_manager.c
+  plasma_store.c
+  plasma_extension.c
+  plasma.c
+  eviction_policy.c
+  ../common/lib/python/common_extension.c
+  test/client_tests.c
+  test/manager_tests.c
+  test/serialization_tests.c
+  PROPERTIES LANGUAGE CXX)
+
 add_library(plasma_lib STATIC
   plasma_client.c
   plasma.c

@@ -5,6 +5,8 @@ project(photon)
 # Recursively include common
 include(${CMAKE_CURRENT_LIST_DIR}/../common/cmake/Common.cmake)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+
 if(APPLE)
   SET(CMAKE_SHARED_LIBRARY_SUFFIX ".so")
 endif(APPLE)
@@ -35,7 +37,7 @@ add_library(photon_client STATIC photon_client.c)
 
 target_link_libraries(photon photon_client ${COMMON_LIB} ${PYTHON_LIBRARIES})
 
-SET_SOURCE_FILES_PROPERTIES(photon_algorithm.c photon_client.c photon_extension.c photon_scheduler.c PROPERTIES LANGUAGE CXX)
+SET_SOURCE_FILES_PROPERTIES(../common/lib/python/common_extension.c photon_algorithm.c photon_client.c photon_extension.c photon_scheduler.c test/photon_tests.c PROPERTIES LANGUAGE CXX)
 
 add_executable(photon_scheduler photon_scheduler.c photon_algorithm.c)
 target_link_libraries(photon_scheduler photon_client common ${HIREDIS_LIB} plasma_lib)

@@ -56,7 +56,7 @@ PhotonMock *PhotonMock_init(int num_workers, int num_mock_workers) {
   int redis_port = 6379;
   const double static_resource_conf[MAX_RESOURCE_INDEX] = {DEFAULT_NUM_CPUS,
                                                            DEFAULT_NUM_GPUS};
-  PhotonMock *mock = malloc(sizeof(PhotonMock));
+  PhotonMock *mock = (PhotonMock *) malloc(sizeof(PhotonMock));
   memset(mock, 0, sizeof(PhotonMock));
   mock->loop = event_loop_create();
   /* Bind to the Photon port and initialize the Photon scheduler. */
@@ -92,7 +92,7 @@ PhotonMock *PhotonMock_init(int num_workers, int num_mock_workers) {
 
   /* Connect a Photon client. */
   mock->num_photon_conns = num_mock_workers;
-  mock->conns = malloc(sizeof(PhotonConnection *) * num_mock_workers);
+  mock->conns = (PhotonConnection **) malloc(sizeof(PhotonConnection *) * num_mock_workers);
   for (int i = 0; i < num_mock_workers; ++i) {
     mock->conns[i] =
         PhotonConnection_init(utstring_body(photon_socket_name), NIL_ACTOR_ID);
@@ -157,11 +157,11 @@ TEST object_reconstruction_test(void) {
    * simulate it having been created and evicted. */
   const char *client_id = "clientid";
   redisContext *context = redisConnect("127.0.0.1", 6379);
-  redisReply *reply = redisCommand(context, "RAY.OBJECT_TABLE_ADD %b %ld %b %s",
+  redisReply *reply = (redisReply *) redisCommand(context, "RAY.OBJECT_TABLE_ADD %b %ld %b %s",
                                    return_id.id, sizeof(return_id.id), 1,
                                    NIL_DIGEST, (size_t) DIGEST_SIZE, client_id);
   freeReplyObject(reply);
-  reply = redisCommand(context, "RAY.OBJECT_TABLE_REMOVE %b %s", return_id.id,
+  reply = (redisReply *) redisCommand(context, "RAY.OBJECT_TABLE_REMOVE %b %s", return_id.id,
                        sizeof(return_id.id), client_id);
   freeReplyObject(reply);
   redisFree(context);
@@ -235,11 +235,11 @@ TEST object_reconstruction_recursive_test(void) {
   redisContext *context = redisConnect("127.0.0.1", 6379);
   for (int i = 0; i < NUM_TASKS; ++i) {
     ObjectID return_id = task_return(specs[i], 0);
-    redisReply *reply = redisCommand(
+    redisReply *reply = (redisReply *) redisCommand(
         context, "RAY.OBJECT_TABLE_ADD %b %ld %b %s", return_id.id,
         sizeof(return_id.id), 1, NIL_DIGEST, (size_t) DIGEST_SIZE, client_id);
     freeReplyObject(reply);
-    reply = redisCommand(context, "RAY.OBJECT_TABLE_REMOVE %b %s", return_id.id,
+    reply = (redisReply *) redisCommand(context, "RAY.OBJECT_TABLE_REMOVE %b %s", return_id.id,
                          sizeof(return_id.id), client_id);
     freeReplyObject(reply);
   }
@@ -319,7 +319,7 @@ task_spec *object_reconstruction_suppression_spec;
 void object_reconstruction_suppression_callback(ObjectID object_id,
                                                 void *user_context) {
   /* Submit the task after adding the object to the object table. */
-  PhotonConnection *worker = user_context;
+  PhotonConnection *worker = (PhotonConnection *) user_context;
   photon_submit(worker, object_reconstruction_suppression_spec);
 }
 
