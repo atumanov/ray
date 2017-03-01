@@ -6,7 +6,7 @@
 #include "common.h"
 #include "plasma.h"
 
-typedef void protocol_builder;
+typedef flatbuffers::FlatBufferBuilder protocol_builder;
 
 /* An argument to a function that a return value gets written to. */
 #define OUT
