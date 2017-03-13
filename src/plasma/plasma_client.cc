@@ -470,7 +470,7 @@ void plasma_contains(PlasmaConnection *conn, ObjectID obj_id, int *has_object) {
   }
 }
 
-void compute_block_hash(unsigned char *data, int64_t nbytes, uint64_t *hash) {
+void compute_block_hash(const unsigned char *data, int64_t nbytes, uint64_t *hash) {
   XXH64_state_t hash_state;
   XXH64_reset(&hash_state, XXH64_DEFAULT_SEED);
   XXH64_update(&hash_state, data, nbytes);
@@ -478,7 +478,7 @@ void compute_block_hash(unsigned char *data, int64_t nbytes, uint64_t *hash) {
 }
 
 bool compute_object_hash_parallel(XXH64_state_t *hash_state,
-                                  unsigned char *data,
+                                  const unsigned char *data,
                                   int64_t nbytes) {
 #ifndef NUMTHREADS
 #define NUMTHREADS 8
