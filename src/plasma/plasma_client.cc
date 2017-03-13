@@ -28,6 +28,10 @@
 #include "uthash.h"
 #include "utlist.h"
 
+/* C++ includes */
+#include <vector>
+#include <thread>
+
 extern "C" {
 #include "sha256.h"
 #include "fling.h"
@@ -465,6 +469,58 @@ void plasma_contains(PlasmaConnection *conn, ObjectID obj_id, int *has_object) {
   }
 }
 
+void compute_block_hash(const unsigned char *data, int64_t nbytes, uint64_t *hash) {
+  XXH64_state_t hash_state;
+  XXH64_reset(&hash_state, XXH64_DEFAULT_SEED);
+  XXH64_update(&hash_state, data, nbytes);
+  *hash = XXH64_digest(&hash_state);
+}
+
+bool compute_object_hash_parallel(XXH64_state_t *hash_state,
+                                  const unsigned char *data,
+                                  int64_t nbytes) {
+#ifndef NUMTHREADS
+#define NUMTHREADS 8
+#endif
+  const uint64_t numthreads = NUMTHREADS;
+  uint64_t threadhash[numthreads+2];
+  //CHECK(numthreads > 0);
+  const uint64_t blocksz = 64; // cache block alignment (alternative: page size)
+  // Calculate the first and last aligned positions in the data stream.
+  unsigned char *databp = (unsigned char *)(((uint64_t)data + blocksz-1) & ~(blocksz-1));
+  unsigned char *dataep = (unsigned char *)(((uint64_t)data + nbytes) & ~(blocksz-1));
+  /* Calculate how many cache blocks we have to hash and divide them equally. */
+  const uint64_t numblocks = (((uint64_t)dataep - (uint64_t)databp)) / blocksz;
+  // uint64_t remainder = numblocks % numthreads;
+  // Update the end pointer
+  dataep = dataep - (numblocks % numthreads)*blocksz;
+  const uint64_t prefix = (uint64_t)databp - (uint64_t)data; // Bytes
+  const uint64_t suffix = (uint64_t)(data+nbytes) - (uint64_t)dataep; // Bytes
+  // Now data == | prefix | k*numthreads*blocksz | suffix |
+  // chunksz = k*blocksz => data == | prefix | numthreads*chunksz | suffix |
+  // Each thread gets a "chunk" of k blocks, except prefix and suffix threads.
+  uint64_t chunksz = ((uint64_t)dataep - (uint64_t)databp) / numthreads;// Bytes
+
+  std::vector<std::thread> threads;
+  // Start the prefix thread.
+  threads.push_back(std::thread(
+      compute_block_hash, data, prefix, &threadhash[0]));
+  for (int i = 1; i <= numthreads; i++) {
+    threads.push_back(std::thread(
+        compute_block_hash, databp + (i-1)*chunksz, chunksz, &threadhash[i]));
+  }
+  threads.push_back(std::thread(
+      compute_block_hash, dataep, suffix, &threadhash[numthreads+1]));
+
+  //Join the threads.
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  XXH64_update(hash_state, (unsigned char*)threadhash, sizeof(threadhash));
+  return true;
+}
+
 bool plasma_compute_object_hash(PlasmaConnection *conn,
                                 ObjectID obj_id,
                                 unsigned char *digest) {
@@ -472,6 +528,8 @@ bool plasma_compute_object_hash(PlasmaConnection *conn,
    * the operation should timeout immediately. */
   ObjectBuffer obj_buffer;
   ObjectID obj_id_array[1] = {obj_id};
+  uint64_t hash;
+
   plasma_get(conn, obj_id_array, 1, 0, &obj_buffer);
   /* If the object was not retrieved, return false. */
   if (obj_buffer.data_size == -1) {
@@ -480,13 +538,17 @@ bool plasma_compute_object_hash(PlasmaConnection *conn,
   /* Compute the hash. */
   XXH64_state_t hash_state;
   XXH64_reset(&hash_state, XXH64_DEFAULT_SEED);
-  XXH64_update(&hash_state, (unsigned char *) obj_buffer.data,
-               obj_buffer.data_size);
+  if (obj_buffer.data_size >= (1<<20)) {
+    compute_object_hash_parallel(&hash_state,
+                                 (unsigned char *) obj_buffer.data,
+                                 obj_buffer.data_size);
+  } else {
+    XXH64_update(&hash_state, (unsigned char *) obj_buffer.data,
+                 obj_buffer.data_size);
+  }
   XXH64_update(&hash_state, (unsigned char *) obj_buffer.metadata,
                obj_buffer.metadata_size);
-  uint64_t hash = XXH64_digest(&hash_state);
-  DCHECK(DIGEST_SIZE >= sizeof(hash));
-  memset(digest, 0, DIGEST_SIZE);
+  hash = XXH64_digest(&hash_state);
   memcpy(digest, &hash, sizeof(hash));
   /* Release the plasma object. */
   plasma_release(conn, obj_id);
@@ -505,7 +567,7 @@ void plasma_seal(PlasmaConnection *conn, ObjectID object_id) {
          "Plasma client called seal an already sealed object");
   object_entry->is_sealed = true;
   /* Send the seal request to Plasma. */
-  unsigned char digest[DIGEST_SIZE];
+  static unsigned char digest[DIGEST_SIZE];
   CHECK(plasma_compute_object_hash(conn, object_id, &digest[0]));
   CHECK(plasma_send_SealRequest(conn->store_conn, conn->builder, object_id,
                                 &digest[0]) >= 0);
