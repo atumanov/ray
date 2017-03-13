@@ -99,13 +99,13 @@ int memcopy_block_aligned(uint8_t *dst, const uint8_t *src, uint64_t nbytes, boo
   const uint64_t blocksz = getpagesize();
   const char *srcbp = (char *)(((uint64_t)src + blocksz-1) & ~(blocksz-1));
   char *srcep = (char *)(((uint64_t)src + nbytes) & ~(blocksz-1));
-  const uint64_t chunksz = ((uint64_t)srcep - (uint64_t)srcbp) / numthreads;//B
   const uint64_t numblocks = (((uint64_t)srcep - (uint64_t)srcbp)) / blocksz;
   // Now we divide these blocks between available threads. Remainder is pushed
   // to the suffix-handling thread.
   // uint64_t remainder = numblocks % numthreads;
   // Update the end pointer
   srcep = srcep - (numblocks % numthreads)*blocksz;
+  const uint64_t chunksz = ((uint64_t)srcep - (uint64_t)srcbp) / numthreads;//B
   const uint64_t prefix = (uint64_t)srcbp - (uint64_t)src; // Bytes
   const uint64_t suffix = (uint64_t)(src+nbytes) - (uint64_t)srcep; // Bytes
   char *dstep = (char *)((uint64_t)dst + prefix + numthreads*chunksz);
