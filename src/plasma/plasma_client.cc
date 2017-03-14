@@ -42,6 +42,9 @@ extern "C" {
 #define XXH64_DEFAULT_SEED 0
 }
 
+#define NUMTHREADS 8
+static std::vector<std::thread> threadpool(NUMTHREADS);
+
 typedef struct {
   /** Key that uniquely identifies the  memory mapped file. In practice, we
    *  take the numerical value of the file descriptor in the object store. */
@@ -476,22 +479,17 @@ void compute_block_hash(const unsigned char *data, int64_t nbytes, uint64_t *has
   *hash = XXH64_digest(&hash_state);
 }
 
-bool compute_object_hash_parallel(XXH64_state_t *hash_state,
+inline bool compute_object_hash_parallel(XXH64_state_t *hash_state,
                                   const unsigned char *data,
                                   int64_t nbytes) {
-#ifndef NUMTHREADS
-#define NUMTHREADS 8
-#endif
   const uint64_t numthreads = NUMTHREADS;
   uint64_t threadhash[numthreads+2];
-  //CHECK(numthreads > 0);
   const uint64_t blocksz = 64; // cache block alignment (alternative: page size)
   // Calculate the first and last aligned positions in the data stream.
   unsigned char *databp = (unsigned char *)(((uint64_t)data + blocksz-1) & ~(blocksz-1));
   unsigned char *dataep = (unsigned char *)(((uint64_t)data + nbytes) & ~(blocksz-1));
   /* Calculate how many cache blocks we have to hash and divide them equally. */
   const uint64_t numblocks = (((uint64_t)dataep - (uint64_t)databp)) / blocksz;
-  // uint64_t remainder = numblocks % numthreads;
   // Update the end pointer
   dataep = dataep - (numblocks % numthreads)*blocksz;
   const uint64_t prefix = (uint64_t)databp - (uint64_t)data; // Bytes
@@ -501,20 +499,18 @@ bool compute_object_hash_parallel(XXH64_state_t *hash_state,
   // Each thread gets a "chunk" of k blocks, except prefix and suffix threads.
   uint64_t chunksz = ((uint64_t)dataep - (uint64_t)databp) / numthreads;// Bytes
 
-  std::vector<std::thread> threads;
-  // Start the prefix thread.
-  threads.push_back(std::thread(
-      compute_block_hash, data, prefix, &threadhash[0]));
-  for (int i = 1; i <= numthreads; i++) {
-    threads.push_back(std::thread(
-        compute_block_hash, databp + (i-1)*chunksz, chunksz, &threadhash[i]));
+  for (int i = 0; i < numthreads; i++) {
+    threadpool[i] = std::thread(
+        compute_block_hash, databp + i*chunksz, chunksz, &threadhash[i]);
   }
-  threads.push_back(std::thread(
-      compute_block_hash, dataep, suffix, &threadhash[numthreads+1]));
+  compute_block_hash(data, prefix, &threadhash[numthreads]);
+  compute_block_hash(dataep, suffix, &threadhash[numthreads+1]);
 
   //Join the threads.
-  for (auto &t : threads) {
-    t.join();
+  for (auto &t : threadpool) {
+    if (t.joinable()) {
+      t.join();
+    }
   }
 
   XXH64_update(hash_state, (unsigned char*)threadhash, sizeof(threadhash));
