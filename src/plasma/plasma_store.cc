@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
@@ -39,6 +40,7 @@ extern "C" {
 #include "fling.h"
 #include "malloc.h"
 void *dlmalloc(size_t);
+void *dlmemalign(size_t, size_t);
 void dlfree(void *);
 }
 
@@ -206,7 +208,18 @@ int create_object(Client *client_context,
     return PlasmaError_OutOfMemory;
   }
   /* Allocate space for the new object */
-  uint8_t *pointer = (uint8_t *) dlmalloc(data_size + metadata_size);
+  //uint8_t *pointer = (uint8_t *) dlmalloc(data_size + metadata_size);
+  uint8_t *pointer = NULL;
+  if (data_size + metadata_size >= (1<<20)) {
+    pointer = (uint8_t *) dlmemalign(getpagesize(), data_size + metadata_size);
+  } else if (data_size + metadata_size >= (1<<12)){
+    // Cache block align everything bigger than a page.
+    pointer = (uint8_t *) dlmemalign(64, data_size + metadata_size);
+  } else {
+    // Use regular unaligned malloc for smaller objects to fill in the gaps.
+    pointer = (uint8_t *) dlmalloc(data_size + metadata_size);
+  }
+
   int fd;
   int64_t map_size;
   ptrdiff_t offset;

@@ -222,6 +222,10 @@ class TestPlasmaClient(unittest.TestCase):
       self.assertFalse(self.plasma_client.contains(object_id))
     for object_id in real_object_ids:
       self.assertTrue(self.plasma_client.contains(object_id))
+      
+  def test_hash_parallel(self):
+    #TODO(atumanov) :CONTINUE HERE
+    pass
 
   def test_hash(self):
     # Check the hash of an object that doesn't exist.

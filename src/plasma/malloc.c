@@ -107,6 +107,11 @@ void *fake_mmap(size_t size) {
   if (pointer == MAP_FAILED) {
     return pointer;
   }
+  int rv = mlock(pointer, size);
+  if (rv != 0) {
+    LOG_INFO("%p = fake_mmap(%lu) failed to mlock", pointer, size);
+    // Allow mlock to fail -- this is a performance optimization.
+  }
 
   /* Increase dlmalloc's allocation granularity directly. */
   mparams.granularity *= GRANULARITY_MULTIPLIER;
@@ -141,6 +146,11 @@ int fake_munmap(void *addr, size_t size) {
   HASH_DELETE(hh_fd, records_by_fd, record);
   HASH_DELETE(hh_pointer, records_by_pointer, record);
 
+  int rv = munlock(addr, size);
+  if (rv != 0) {
+    LOG_INFO("fake_munmap(%p), size=%d failed to munlock before unmapping",
+        addr, size);
+  }
   int r = munmap(addr, size);
   if (r == 0) {
     close(record->fd);
