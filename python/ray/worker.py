@@ -607,7 +607,8 @@ class Worker(object):
       num_return_vals, num_cpus, num_gpus = self.function_properties[
           self.task_driver_id.id()][function_id.id()]
 
-      # Submit the task to local scheduler.
+      # Submit the task to local scheduler. The task's submit depth is one
+      # greater than its parent's.
       task = ray.local_scheduler.Task(
           self.task_driver_id,
           ray.local_scheduler.ObjectID(function_id.id()),
@@ -615,6 +616,7 @@ class Worker(object):
           num_return_vals,
           self.current_task_id,
           self.task_index,
+          self.submit_depth + 1,
           actor_id, self.actor_counters[actor_id],
           [num_cpus, num_gpus])
       # Increment the worker's task index to track how many tasks have been
@@ -1414,6 +1416,7 @@ def connect(info, object_id_seed=None, mode=WORKER_MODE, worker=global_worker,
     np.random.set_state(numpy_state)
     # Set other fields needed for computing task IDs.
     worker.task_index = 0
+    worker.submit_depth = 0
     worker.put_index = 0
 
     # Create an entry for the driver task in the task table. This task is added
@@ -1428,6 +1431,7 @@ def connect(info, object_id_seed=None, mode=WORKER_MODE, worker=global_worker,
         0,
         worker.current_task_id,
         worker.task_index,
+        worker.submit_depth,
         ray.local_scheduler.ObjectID(NIL_ACTOR_ID),
         worker.actor_counters[actor_id],
         [0, 0])
@@ -1809,6 +1813,7 @@ def main_loop(worker=global_worker):
       worker.current_task_id = task.task_id()
       worker.current_function_id = task.function_id().id()
       worker.task_index = 0
+      worker.submit_depth = task.submit_depth()
       worker.put_index = 0
       function_id = task.function_id()
       args = task.arguments()
