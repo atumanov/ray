@@ -70,8 +70,10 @@ typedef struct {
   double dynamic_resources[ResourceIndex_MAX];
 } LocalSchedulerState;
 
+typedef struct LocalSchedulerClient LocalSchedulerClient;
+
 /** Contains all information associated with a local scheduler client. */
-typedef struct {
+struct LocalSchedulerClient {
   /** The socket used to communicate with the client. */
   int sock;
   /** A pointer to the task object that is currently running on this client. If
@@ -89,8 +91,10 @@ typedef struct {
   /** The ID of the actor on this worker. If there is no actor running on this
    *  worker, this should be NIL_ACTOR_ID. */
   ActorID actor_id;
+  LocalSchedulerClient *parent_worker;
+  LocalSchedulerClient *child_worker;
   /** A pointer to the local scheduler state. */
   LocalSchedulerState *local_scheduler_state;
-} LocalSchedulerClient;
+};
 
 #endif /* LOCAL_SCHEDULER_SHARED_H */

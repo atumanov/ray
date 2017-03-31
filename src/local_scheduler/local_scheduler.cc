@@ -744,6 +744,12 @@ void process_message(event_loop *loop,
       }
       worker->task_in_progress = NULL;
     }
+
+    if (worker->parent_worker != NULL) {
+      worker->parent_worker->child_worker = NULL;
+      worker->parent_worker = NULL;
+    }
+
     /* Let the scheduling algorithm process the fact that there is an available
      * worker. */
     if (ActorID_equal(worker->actor_id, NIL_ACTOR_ID)) {
@@ -784,6 +790,10 @@ void process_message(event_loop *loop,
          * state to not blocked. */
         CHECK(worker->is_blocked);
         handle_worker_unblocked(state, state->algorithm_state, worker);
+        if (worker->child_worker) {
+          worker->child_worker->parent_worker = NULL;
+          worker->child_worker = NULL;
+        }
       }
     }
     print_worker_info("Worker unblocked", state->algorithm_state);
@@ -816,6 +826,8 @@ void new_client_connection(event_loop *loop,
   worker->pid = 0;
   worker->is_child = false;
   worker->actor_id = NIL_ACTOR_ID;
+  worker->parent_worker = NULL;
+  worker->child_worker = NULL;
   worker->local_scheduler_state = state;
   utarray_push_back(state->workers, &worker);
   event_loop_add_file(loop, new_socket, EVENT_LOOP_READ, process_message,

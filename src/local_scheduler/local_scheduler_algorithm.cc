@@ -587,11 +587,23 @@ int fetch_object_timeout_handler(event_loop *loop, timer_id id, void *context) {
  * @param algorithm_state The scheduling algorithm state.
  * @return Void.
  */
-void dispatch_tasks(LocalSchedulerState *state,
-                    SchedulingAlgorithmState *algorithm_state) {
+void _dispatch_tasks(LocalSchedulerState *state,
+                     SchedulingAlgorithmState *algorithm_state,
+                     LocalSchedulerClient *blocked_worker) {
+  int64_t min_depth = 0;
+  if (blocked_worker) {
+    min_depth = TaskSpec_submit_depth(
+                    Task_task_spec(blocked_worker->task_in_progress)) +
+                1;
+  }
   /* Assign as many tasks as we can, while there are workers available. */
-  for (auto &queue : *algorithm_state->dispatch_task_queue) {
-    for (auto it = queue.second.begin(); it != queue.second.end();) {
+  auto queue_it = algorithm_state->dispatch_task_queue->lower_bound(min_depth);
+  if (queue_it == algorithm_state->dispatch_task_queue->end()) {
+    return;
+  }
+
+  for (; queue_it != algorithm_state->dispatch_task_queue->end(); ++queue_it) {
+    for (auto it = queue_it->second.begin(); it != queue_it->second.end();) {
       TaskQueueEntry task = *it;
       /* If there is a task to assign, but there are no more available workers
        * in the worker pool, then exit. Ensure that there will be an available
@@ -648,11 +660,30 @@ void dispatch_tasks(LocalSchedulerState *state,
       /* Free the task queue entry. */
       TaskQueueEntry_free(&task);
       /* Dequeue the task. */
-      it = queue.second.erase(it);
+      it = queue_it->second.erase(it);
+
+      if (blocked_worker) {
+        (*worker)->parent_worker = blocked_worker;
+        blocked_worker->child_worker = *worker;
+        return;
+      }
     } /* End for each task in the dispatch queue. */
   }
 }
 
+void dispatch_tasks(LocalSchedulerState *state,
+                    SchedulingAlgorithmState *algorithm_state) {
+  for (LocalSchedulerClient **p = (LocalSchedulerClient **) utarray_front(
+           algorithm_state->blocked_workers);
+       p != NULL; p = (LocalSchedulerClient **) utarray_next(
+                      algorithm_state->blocked_workers, p)) {
+    if ((*p)->child_worker == NULL) {
+      _dispatch_tasks(state, algorithm_state, (*p));
+    }
+  }
+
+  _dispatch_tasks(state, algorithm_state, NULL);
+}
 /**
  * A helper function to allocate a queue entry for a task specification and
  * push it onto a generic queue.
@@ -1106,6 +1137,7 @@ void handle_worker_blocked(LocalSchedulerState *state,
       update_dynamic_resources(state, spec, true);
 
       /* Try to dispatch tasks, since we may have freed up some resources. */
+      auto depth = TaskSpec_submit_depth(spec);
       dispatch_tasks(state, algorithm_state);
       return;
     }
