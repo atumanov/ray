@@ -554,7 +554,7 @@ class WorkerPoolTests(unittest.TestCase):
       #object_ids = [f.remote(i, j) for j in range(1)]
       return ray.get(object_ids)
 
-    ray.init(num_workers=1)
+    ray.init(num_workers=1, redirect_output=True)
     ray.get([g.remote(i) for i in range(10000)])
     ray.worker.cleanup()
 
