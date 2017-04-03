@@ -176,7 +176,7 @@ class TestTask(unittest.TestCase):
     for args in args_list:
       for num_return_vals in [0, 1, 2, 3, 5, 10, 100]:
         task = local_scheduler.Task(driver_id, function_id, args,
-                                    num_return_vals, parent_id, 0)
+                                    num_return_vals, parent_id, 0, 0)
         self.check_task(task, function_id, num_return_vals, args)
         data = local_scheduler.task_to_string(task)
         task2 = local_scheduler.task_from_string(data)
