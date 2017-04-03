@@ -535,6 +535,7 @@ class ReconstructionTestsMultinode(ReconstructionTests):
   # one worker each.
   num_local_schedulers = 4
 
+
 # NOTE(swang): This test tries to launch 1000 workers and breaks.
 class WorkerPoolTests(unittest.TestCase):
 
@@ -551,7 +552,6 @@ class WorkerPoolTests(unittest.TestCase):
       # Each instance of g submits and blocks on the result of another remote
       # task.
       object_ids = [f.remote(i, j) for j in range(10)]
-      #object_ids = [f.remote(i, j) for j in range(1)]
       return ray.get(object_ids)
 
     ray.init(num_workers=1, redirect_output=True)
