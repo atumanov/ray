@@ -1313,19 +1313,19 @@ void handle_object_removed(LocalSchedulerState *state,
         ++it;
       }
     }
+  }
 
-    /* Track the dependency for tasks that are in the waiting queue, including
-     * those that were just moved from the dispatch queue. */
-    for (auto it = algorithm_state->waiting_task_queue->begin();
-         it != algorithm_state->waiting_task_queue->end(); ++it) {
-      int64_t num_args = TaskSpec_num_args(it->spec);
-      for (int i = 0; i < num_args; ++i) {
-        if (TaskSpec_arg_by_ref(it->spec, i)) {
-          ObjectID arg_id = TaskSpec_arg_id(it->spec, i);
-          if (ObjectID_equal(arg_id, removed_object_id)) {
-            fetch_missing_dependency(state, algorithm_state, it,
-                                     removed_object_id);
-          }
+  /* Track the dependency for tasks that are in the waiting queue, including
+   * those that were just moved from the dispatch queue. */
+  for (auto it = algorithm_state->waiting_task_queue->begin();
+       it != algorithm_state->waiting_task_queue->end(); ++it) {
+    int64_t num_args = TaskSpec_num_args(it->spec);
+    for (int i = 0; i < num_args; ++i) {
+      if (TaskSpec_arg_by_ref(it->spec, i)) {
+        ObjectID arg_id = TaskSpec_arg_id(it->spec, i);
+        if (ObjectID_equal(arg_id, removed_object_id)) {
+          fetch_missing_dependency(state, algorithm_state, it,
+                                   removed_object_id);
         }
       }
     }
