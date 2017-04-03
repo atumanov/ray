@@ -91,7 +91,11 @@ struct LocalSchedulerClient {
   /** The ID of the actor on this worker. If there is no actor running on this
    *  worker, this should be NIL_ACTOR_ID. */
   ActorID actor_id;
+  /** If this is not NULL, this is the blocked worker whose resources we are
+   *  temporarily using. */
   LocalSchedulerClient *parent_worker;
+  /** If this is not NULL, we are a blocked worker, and this is the worker
+   *  who's borrowing our resources. */
   LocalSchedulerClient *child_worker;
   /** A pointer to the local scheduler state. */
   LocalSchedulerState *local_scheduler_state;

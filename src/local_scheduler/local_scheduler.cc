@@ -138,6 +138,19 @@ void kill_worker(LocalSchedulerClient *worker, bool cleanup) {
     } else {
       Task_free(worker->task_in_progress);
     }
+
+    if (worker->parent_worker != NULL) {
+      /* This worker was using a blocked worker's resources. Clear this
+       * dependency. */
+      worker->parent_worker->child_worker = NULL;
+      worker->parent_worker = NULL;
+    }
+    if (worker->child_worker != NULL) {
+      /* This worker was blocked and some other worker was using its resources.
+       * Clear this dependency. */
+      worker->child_worker->parent_worker = NULL;
+      worker->child_worker = NULL;
+    }
   }
 
   LOG_DEBUG("Killed worker with pid %d", worker->pid);
@@ -746,6 +759,9 @@ void process_message(event_loop *loop,
     }
 
     if (worker->parent_worker != NULL) {
+      /* This worker was assigned resources temporarily returned by a blocked
+       * worker. Now that we're done executing our task, allow a different task
+       * to be assigned the blocked worker's resources. */
       worker->parent_worker->child_worker = NULL;
       worker->parent_worker = NULL;
     }
@@ -791,6 +807,10 @@ void process_message(event_loop *loop,
         CHECK(worker->is_blocked);
         handle_worker_unblocked(state, state->algorithm_state, worker);
         if (worker->child_worker) {
+          /* Another worker was reassigned the resources that we temporarily
+           * returned. Now that we're no longer blocked, we should take back
+           * the resources that we returned and stop reassigning them to other
+           * workers. */
           worker->child_worker->parent_worker = NULL;
           worker->child_worker = NULL;
         }

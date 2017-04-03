@@ -73,11 +73,12 @@ typedef struct {
 /** Part of the local scheduler state that is maintained by the scheduling
  *  algorithm. */
 struct SchedulingAlgorithmState {
-  /** An array of pointers to tasks that are waiting for dependencies. */
+  /** An list of tasks that are waiting for dependencies. */
   std::list<TaskQueueEntry> *waiting_task_queue;
-  /** An array of pointers to tasks whose dependencies are ready but that are
-   *  waiting to be assigned to a worker. */
-  std::map<int64_t, std::list<TaskQueueEntry>> *dispatch_task_queue;
+  /** A map of tasks that whose dependencies are ready but that are
+   *  waiting to be assigned to a worker. The map is keyed by submit depth.
+   *  Each value is a list of tasks that have that submit depth. */
+  std::map<int64_t, std::list<TaskQueueEntry>> *dispatch_task_queues;
   /** This is a hash table from actor ID to information about that actor. In
    *  particular, a queue of tasks that are waiting to execute on that actor.
    *  This is only used for actors that exist locally. */
@@ -135,7 +136,7 @@ SchedulingAlgorithmState *SchedulingAlgorithmState_init(void) {
   algorithm_state->remote_objects = NULL;
   /* Initialize the local data structures used for queuing tasks and workers. */
   algorithm_state->waiting_task_queue = new std::list<TaskQueueEntry>();
-  algorithm_state->dispatch_task_queue =
+  algorithm_state->dispatch_task_queues =
       new std::map<int64_t, std::list<TaskQueueEntry>>();
 
   utarray_new(algorithm_state->cached_submitted_actor_tasks, &task_spec_icd);
@@ -158,13 +159,13 @@ void SchedulingAlgorithmState_free(SchedulingAlgorithmState *algorithm_state) {
   algorithm_state->waiting_task_queue->clear();
   delete algorithm_state->waiting_task_queue;
   /* Free all the tasks in the dispatch queue. */
-  for (auto &task_queue : *algorithm_state->dispatch_task_queue) {
+  for (auto &task_queue : *algorithm_state->dispatch_task_queues) {
     for (auto &task : task_queue.second) {
       TaskQueueEntry_free(&task);
     }
   }
-  algorithm_state->dispatch_task_queue->clear();
-  delete algorithm_state->dispatch_task_queue;
+  algorithm_state->dispatch_task_queues->clear();
+  delete algorithm_state->dispatch_task_queues;
   /* Remove all of the remaining actors. */
   LocalActorInfo *actor_entry, *tmp_actor_entry;
   HASH_ITER(hh, algorithm_state->local_actor_infos, actor_entry,
@@ -208,18 +209,28 @@ void SchedulingAlgorithmState_free(SchedulingAlgorithmState *algorithm_state) {
   free(algorithm_state);
 }
 
+int num_waiting_tasks(SchedulingAlgorithmState *algorithm_state) {
+  return algorithm_state->waiting_task_queue->size();
+}
+
+int num_dispatch_tasks(SchedulingAlgorithmState *algorithm_state) {
+  int count = 0;
+  for (auto &queue : *algorithm_state->dispatch_task_queues) {
+    count += queue.second.size();
+  }
+  return count;
+}
+
 void provide_scheduler_info(LocalSchedulerState *state,
                             SchedulingAlgorithmState *algorithm_state,
                             LocalSchedulerInfo *info) {
   info->total_num_workers = utarray_len(state->workers);
   /* TODO(swang): Provide separate counts for tasks that are waiting for
    * dependencies vs tasks that are waiting to be assigned. */
-  int64_t waiting_task_queue_length =
-      algorithm_state->waiting_task_queue->size();
-  int64_t dispatch_task_queue_length =
-      algorithm_state->dispatch_task_queue->size();
+  int64_t waiting_task_queue_length = num_waiting_tasks(algorithm_state);
+  int64_t dispatch_task_queues_length = num_dispatch_tasks(algorithm_state);
   info->task_queue_length =
-      waiting_task_queue_length + dispatch_task_queue_length;
+      waiting_task_queue_length + dispatch_task_queues_length;
   info->available_workers = utarray_len(algorithm_state->available_workers);
   /* Copy static and dynamic resource information. */
   for (int i = 0; i < ResourceIndex_MAX; i++) {
@@ -581,28 +592,38 @@ int fetch_object_timeout_handler(event_loop *loop, timer_id id, void *context) {
 }
 
 /**
- * Assign as many tasks from the dispatch queue as possible.
+ * Assign as many tasks from the dispatch queues as possible. If blocked_worker
+ * is provided, this assigns at most one task, with a submit depth greater than
+ * that of the blocked_worker's task in progress.
  *
  * @param state The scheduler state.
  * @param algorithm_state The scheduling algorithm state.
+ * @param blocked_worker A blocked worker who temporarily returned resources
+ *        that we are trying to reassign.
  * @return Void.
  */
 void _dispatch_tasks(LocalSchedulerState *state,
                      SchedulingAlgorithmState *algorithm_state,
                      LocalSchedulerClient *blocked_worker) {
+  /* If blocked_worker is not provided, start assigning tasks from the lowest
+   * submit depth. */
   int64_t min_depth = 0;
   if (blocked_worker) {
+    /* Find a task with submit depth greater than that of the blocked worker's
+     * task in progress. */
     min_depth = TaskSpec_submit_depth(
                     Task_task_spec(blocked_worker->task_in_progress)) +
                 1;
   }
-  /* Assign as many tasks as we can, while there are workers available. */
-  auto queue_it = algorithm_state->dispatch_task_queue->lower_bound(min_depth);
-  if (queue_it == algorithm_state->dispatch_task_queue->end()) {
+  auto queue_it = algorithm_state->dispatch_task_queues->lower_bound(min_depth);
+  if (queue_it == algorithm_state->dispatch_task_queues->end()) {
+    /* There are no tasks that have submit depth greater than that of the
+     * blocked worker's task in progress. */
     return;
   }
 
-  for (; queue_it != algorithm_state->dispatch_task_queue->end(); ++queue_it) {
+  /* Assign as many tasks as we can, while there are workers available. */
+  for (; queue_it != algorithm_state->dispatch_task_queues->end(); ++queue_it) {
     for (auto it = queue_it->second.begin(); it != queue_it->second.end();) {
       TaskQueueEntry task = *it;
       /* If there is a task to assign, but there are no more available workers
@@ -662,6 +683,10 @@ void _dispatch_tasks(LocalSchedulerState *state,
       /* Dequeue the task. */
       it = queue_it->second.erase(it);
 
+      /* Mark that this worker is using the resources temporarily returned by
+       * the blocked worker. This gets cleared when either: 1) the worker
+       * finishes its task 2) the blocked worker becomes unblocked or 3) either
+       * worker is killed. */
       if (blocked_worker) {
         (*worker)->parent_worker = blocked_worker;
         blocked_worker->child_worker = *worker;
@@ -671,17 +696,35 @@ void _dispatch_tasks(LocalSchedulerState *state,
   }
 }
 
+/**
+ * Assign as many tasks from the dispatch queues as possible. If there are
+ * blocked workers, this first tries to reassign the resources temporarily
+ * returned by the blocked worker to a task with a greater submit depth, to try
+ * and minimize the time before the worker is unblocked again. Once all of
+ * these tasks are assigned, this assigns as many additional tasks as possible
+ * in order of submit depth, with FIFO ordering between tasks with the same
+ * submit depth.
+ *
+ * @param state The scheduler state.
+ * @param algorithm_state The scheduling algorithm state.
+ * @return Void.
+ */
 void dispatch_tasks(LocalSchedulerState *state,
                     SchedulingAlgorithmState *algorithm_state) {
+  /* Find blocked workers that temporarily returned resources that aren't being
+   * used. */
   for (LocalSchedulerClient **p = (LocalSchedulerClient **) utarray_front(
            algorithm_state->blocked_workers);
        p != NULL; p = (LocalSchedulerClient **) utarray_next(
                       algorithm_state->blocked_workers, p)) {
     if ((*p)->child_worker == NULL) {
+      /* No worker is using the resources returned by this blocked worker. Try
+       * to reassign the resources to a new task. */
       _dispatch_tasks(state, algorithm_state, (*p));
     }
   }
 
+  /* Assign as many additional tasks as possible, in order of submit depth. */
   _dispatch_tasks(state, algorithm_state, NULL);
 }
 /**
@@ -775,7 +818,7 @@ void queue_dispatch_task(LocalSchedulerState *state,
   TaskQueueEntry task_entry = TaskQueueEntry_init(spec, task_spec_size);
   auto depth = TaskSpec_submit_depth(spec);
   std::list<TaskQueueEntry> &queue =
-      (*algorithm_state->dispatch_task_queue)[depth];
+      (*algorithm_state->dispatch_task_queues)[depth];
   queue_task(state, &queue, &task_entry, from_global_scheduler);
 }
 
@@ -1223,7 +1266,7 @@ void handle_object_available(LocalSchedulerState *state,
       if (can_run(algorithm_state, it->spec)) {
         LOG_DEBUG("Moved task to dispatch queue");
         auto depth = TaskSpec_submit_depth(it->spec);
-        (*algorithm_state->dispatch_task_queue)[depth].push_back(*it);
+        (*algorithm_state->dispatch_task_queues)[depth].push_back(*it);
         /* Remove the entry with a matching TaskSpec pointer from the waiting
          * queue, but do not free the task spec. */
         algorithm_state->waiting_task_queue->erase(it);
@@ -1256,7 +1299,7 @@ void handle_object_removed(LocalSchedulerState *state,
    * tasks in the dispatch queue, or batching object notifications. */
   /* Track the dependency for tasks that were in the dispatch queue. Remove
    * these tasks from the dispatch queue and push them to the waiting queue. */
-  for (auto &queue : *algorithm_state->dispatch_task_queue) {
+  for (auto &queue : *algorithm_state->dispatch_task_queues) {
     for (auto it = queue.second.begin(); it != queue.second.end();) {
       if (TaskSpec_is_dependent_on(it->spec, removed_object_id)) {
         /* This task was dependent on the removed object. */
@@ -1287,18 +1330,6 @@ void handle_object_removed(LocalSchedulerState *state,
       }
     }
   }
-}
-
-int num_waiting_tasks(SchedulingAlgorithmState *algorithm_state) {
-  return algorithm_state->waiting_task_queue->size();
-}
-
-int num_dispatch_tasks(SchedulingAlgorithmState *algorithm_state) {
-  int count = 0;
-  for (auto &queue : *algorithm_state->dispatch_task_queue) {
-    count += queue.second.size();
-  }
-  return count;
 }
 
 void print_worker_info(const char *message,

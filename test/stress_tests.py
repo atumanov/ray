@@ -544,20 +544,18 @@ class WorkerPoolTests(unittest.TestCase):
   def testBlockingTasks(self):
     @ray.remote
     def f(i, j):
-      print("Executing F: {} {}".format(i, j))
       return (i, j)
 
     @ray.remote
     def g(i):
       # Each instance of g submits and blocks on the result of another remote
       # task.
-      print("Executing G: {}".format(i))
       object_ids = [f.remote(i, j) for j in range(10)]
       #object_ids = [f.remote(i, j) for j in range(1)]
       return ray.get(object_ids)
 
     ray.init(num_workers=1)
-    ray.get([g.remote(i) for i in range(1000)])
+    ray.get([g.remote(i) for i in range(10000)])
     ray.worker.cleanup()
 
 
