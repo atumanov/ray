@@ -62,6 +62,9 @@ add_library(numbuf SHARED
   python/src/pynumbuf/adapters/python.cc
   ${COMMON_EXTENSION})
 
+add_executable(mymembench python/src/pynumbuf/mymembench.cc)
+target_link_libraries(mymembench -lpthread)
+
 get_filename_component(PYTHON_SHARED_LIBRARY ${PYTHON_LIBRARIES} NAME)
 if(APPLE)
   add_custom_command(TARGET numbuf

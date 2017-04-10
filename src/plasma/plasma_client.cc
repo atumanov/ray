@@ -567,8 +567,8 @@ void plasma_seal(PlasmaConnection *conn, ObjectID object_id) {
          "Plasma client called seal an already sealed object");
   object_entry->is_sealed = true;
   /* Send the seal request to Plasma. */
-  static unsigned char digest[DIGEST_SIZE];
-  CHECK(plasma_compute_object_hash(conn, object_id, &digest[0]));
+  static unsigned char digest[DIGEST_SIZE] = {0};
+  // CHECK(plasma_compute_object_hash(conn, object_id, &digest[0]));
   CHECK(plasma_send_SealRequest(conn->store_conn, conn->builder, object_id,
                                 &digest[0]) >= 0);
   /* We call plasma_release to decrement the number of instances of this object
