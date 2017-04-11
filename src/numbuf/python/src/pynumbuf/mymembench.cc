@@ -15,6 +15,9 @@
 #include <iostream>
 #include <thread>
 
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+
 using namespace std;
 
 #ifndef NUMTRIALS
@@ -61,12 +64,89 @@ int create_buffer(int64_t size) {
   return fd;
 }
 
-void *do_mmap(size_t size) {
+void init_msg(struct msghdr *msg,
+              struct iovec *iov,
+              char *buf,
+              size_t buf_len) {
+  iov->iov_base = buf;
+  iov->iov_len = 1;
+
+  msg->msg_iov = iov;
+  msg->msg_iovlen = 1;
+  msg->msg_control = buf;
+  msg->msg_controllen = buf_len;
+  msg->msg_name = NULL;
+  msg->msg_namelen = 0;
+}
+
+int send_fd(int conn, int fd) {
+  struct msghdr msg;
+  struct iovec iov;
+  char buf[CMSG_SPACE(sizeof(int))];
+  memset(&buf, 0, CMSG_SPACE(sizeof(int)));
+
+  init_msg(&msg, &iov, buf, sizeof(buf));
+
+  struct cmsghdr *header = CMSG_FIRSTHDR(&msg);
+  header->cmsg_level = SOL_SOCKET;
+  header->cmsg_type = SCM_RIGHTS;
+  header->cmsg_len = CMSG_LEN(sizeof(int));
+  *(int *) CMSG_DATA(header) = fd;
+
+  /* Send file descriptor. */
+  return sendmsg(conn, &msg, 0);
+}
+
+int recv_fd(int conn) {
+  struct msghdr msg;
+  struct iovec iov;
+  char buf[CMSG_SPACE(sizeof(int))];
+  init_msg(&msg, &iov, buf, sizeof(buf));
+
+  if (recvmsg(conn, &msg, 0) == -1)
+    return -1;
+
+  int found_fd = -1;
+  int oh_noes = 0;
+  for (struct cmsghdr *header = CMSG_FIRSTHDR(&msg); header != NULL;
+       header = CMSG_NXTHDR(&msg, header))
+    if (header->cmsg_level == SOL_SOCKET && header->cmsg_type == SCM_RIGHTS) {
+      int count =
+          (header->cmsg_len - (CMSG_DATA(header) - (unsigned char *) header)) /
+          sizeof(int);
+      for (int i = 0; i < count; ++i) {
+        int fd = ((int *) CMSG_DATA(header))[i];
+        if (found_fd == -1) {
+          found_fd = fd;
+        } else {
+          close(fd);
+          oh_noes = 1;
+        }
+      }
+    }
+
+  /* The sender sent us more than one file descriptor. We've closed
+   * them all to prevent fd leaks but notify the caller that we got
+   * a bad message. */
+  if (oh_noes) {
+    close(found_fd);
+    errno = EBADMSG;
+    return -1;
+  }
+
+  return found_fd;
+}
+int do_mmap(size_t size) {
   int fd = create_buffer(size);
   printf("do_mmap: fd = %d\n", fd);
+  return fd;
+}
+
+void *get_pointer_from_file(int fd, size_t size) {
   errno = 0;
   //void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE|MAP_POPULATE, fd, 0);
-  void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED|MAP_POPULATE, fd, 0);
+  //void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED|MAP_POPULATE, fd, 0);
+  void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (pointer == MAP_FAILED) {
    fprintf(stderr, "errno=%d\n", errno);
    perror("map failed");
@@ -407,7 +487,6 @@ int main(int argc, char **argv) {
     NUMMB = atol(argv[2]);
   }
   const uint64_t nbytes = NUMMB * (1<<20);
-  dst = reinterpret_cast<uint64_t *>(do_mmap(nbytes*2));
   //int rv = posix_memalign((void **)&dst, 64, nbytes);
 
   switch(expnum) {
@@ -426,8 +505,17 @@ int main(int argc, char **argv) {
       struct timeval tv1, tv2;
       if (src) free(src);
       src = alloc_randombytes(nbytes);
+
+      int sockets[2];
+      static const int parentsocket = 0;
+      static const int childsocket = 1;
+      socketpair(PF_LOCAL, SOCK_STREAM, 0, sockets);
+
       pid_t pid = fork();
       if (pid == 0) {
+        close(sockets[parentsocket]);
+        int fd = recv_fd(sockets[childsocket]);
+        dst = reinterpret_cast<uint64_t *>(get_pointer_from_file(fd, nbytes*2));
         gettimeofday(&tv1, NULL);
         memcopy_helper.memcopy(reinterpret_cast<uint8_t *>(dst),
             reinterpret_cast<uint8_t *>(src), nbytes);
@@ -437,6 +525,10 @@ int main(int argc, char **argv) {
                nbytes, elapsed, nbytes/((1<<20)*elapsed));
         exit(0);
       } else {
+        close(sockets[childsocket]);
+        int fd = do_mmap(nbytes*2);
+        send_fd(sockets[parentsocket], fd);
+        dst = reinterpret_cast<uint64_t *>(get_pointer_from_file(fd, nbytes*2));
         wait(pid);
       }
     }
