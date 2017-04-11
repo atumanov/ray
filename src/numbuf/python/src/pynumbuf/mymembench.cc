@@ -426,13 +426,19 @@ int main(int argc, char **argv) {
       struct timeval tv1, tv2;
       if (src) free(src);
       src = alloc_randombytes(nbytes);
-      gettimeofday(&tv1, NULL);
-      memcopy_helper.memcopy(reinterpret_cast<uint8_t *>(dst),
-          reinterpret_cast<uint8_t *>(src), nbytes);
-      gettimeofday(&tv2, NULL);
-      double elapsed = ((tv2.tv_sec - tv1.tv_sec)*1000000 + (tv2.tv_usec - tv1.tv_usec))/1000000.0;
-      printf("copied %llu bytes in time = %8.4f MBps=%8.4f\n",
-             nbytes, elapsed, nbytes/((1<<20)*elapsed));
+      pid_t pid = fork();
+      if (pid == 0) {
+        gettimeofday(&tv1, NULL);
+        memcopy_helper.memcopy(reinterpret_cast<uint8_t *>(dst),
+            reinterpret_cast<uint8_t *>(src), nbytes);
+        gettimeofday(&tv2, NULL);
+        double elapsed = ((tv2.tv_sec - tv1.tv_sec)*1000000 + (tv2.tv_usec - tv1.tv_usec))/1000000.0;
+        printf("copied %llu bytes in time = %8.4f MBps=%8.4f\n",
+               nbytes, elapsed, nbytes/((1<<20)*elapsed));
+        exit(0);
+      } else {
+        wait(pid);
+      }
     }
       break;
 
