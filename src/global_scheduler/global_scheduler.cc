@@ -431,9 +431,9 @@ void start_server(const std::vector<std::string>& redis_addrs, const std::vector
                        process_task_waiting, (void *) g_state, NULL, NULL,
                        NULL);
 
-  object_table_subscribe_to_notifications(g_state->db, true,
-                                          object_table_subscribe_callback,
-                                          g_state, NULL, NULL, NULL);
+  //object_table_subscribe_to_notifications(g_state->db, true,
+  //                                        object_table_subscribe_callback,
+  //                                        g_state, NULL, NULL, NULL);
   /* Subscribe to notifications from local schedulers. These notifications serve
    * as heartbeats and contain informaion about the load on the local
    * schedulers. */
