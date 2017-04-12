@@ -1908,7 +1908,7 @@ def main_loop(worker=global_worker):
         process_task(task)
 
     # Push all of the log events to the global state store.
-    flush_log()
+    #flush_log()
 
 
 def _submit_task(function_id, func_name, args, worker=global_worker):
