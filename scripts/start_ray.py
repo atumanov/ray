@@ -6,6 +6,8 @@ import argparse
 import redis
 
 import ray.services as services
+import ray
+print("path", ray.__path__)
 
 parser = argparse.ArgumentParser(
     description="Parse addresses for the worker to connect to.")

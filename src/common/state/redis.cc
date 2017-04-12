@@ -205,6 +205,30 @@ DBHandle *db_connect(const std::vector<std::string>& db_addresses,
   db->client_type = strdup(client_type);
   db->client = client;
   db->db_client_cache = NULL;
+  utstring_new(db->command);
+
+  // the redis protocol, see https://redis.io/topics/protocol
+  std::string result_table_header = "*4\r\n$20\r\nRAY.RESULT_TABLE_ADD\r\n$20\r\n";
+  std::copy(result_table_header.begin(), result_table_header.end(), std::back_inserter(db->result_table_buffer));
+  db->result_table_first_index = db->result_table_buffer.size();
+  // Placeholder for object ID.
+  for (int i = 0; i < 20; ++i) {
+    db->result_table_buffer.push_back('\0');
+  }
+  db->result_table_second_index = db->result_table_buffer.size();
+  std::string result_table_mid = "\r\n$20\r\n";
+  std::copy(result_table_mid.begin(), result_table_mid.end(), std::back_inserter(db->result_table_buffer));
+  db->result_table_second_index = db->result_table_buffer.size();
+  // Placeholder for task ID.
+  for (int i = 0; i < 20; ++i) {
+    db->result_table_buffer.push_back('\0');
+  }
+  std::string result_table_end = "\r\n$1\r\n";
+  std::copy(result_table_end.begin(), result_table_end.end(), std::back_inserter(db->result_table_buffer));
+  db->result_table_third_index = db->result_table_buffer.size();
+  db->result_table_buffer.push_back('\0');
+  std::string result_table_footer = "\r\n";
+  std::copy(result_table_footer.begin(), result_table_footer.end(), std::back_inserter(db->result_table_buffer));
 
   DCHECK(db_addresses.size() == db_ports.size());
   for (int i = 1; i < db_addresses.size(); ++i) {
@@ -418,10 +442,19 @@ void redis_result_table_add(TableCallbackData *callback_data) {
   redisAsyncContext *context = get_redis_context(db, id);
 
   /* Add the result entry to the result table. */
-  int status = redisAsyncCommand(
+
+  for (int i = 0; i < 20; ++i) {
+    db->result_table_buffer[db->result_table_first_index + i] = id.id[i];
+  }
+  for (int i = 0; i < 20; ++i) {
+    db->result_table_buffer[db->result_table_second_index + i] = info->task_id.id[i];
+  }
+  db->result_table_buffer[db->result_table_third_index] = '0' + is_put;
+
+  int status = redisAsyncFormattedCommand(
       context, redis_result_table_add_callback,
-      (void *) callback_data->timer_id, "RAY.RESULT_TABLE_ADD %b %b %d", id.id,
-      sizeof(id.id), info->task_id.id, sizeof(info->task_id.id), is_put);
+      (void *) callback_data->timer_id,
+      db->result_table_buffer.data(), db->result_table_buffer.size());
   if ((status == REDIS_ERR) || context->err) {
     LOG_REDIS_DEBUG(context, "Error in result table add");
   }
@@ -796,11 +829,21 @@ void redis_task_table_add_task(TableCallbackData *callback_data) {
   TaskSpec *spec = Task_task_spec(task);
 
   CHECKM(task != NULL, "NULL task passed to redis_task_table_add_task.");
-  int status = redisAsyncCommand(
+
+  // the redis protocol, see https://redis.io/topics/protocol
+  utstring_printf(db->command, "*5\r\n"); // number of entris in the array
+  utstring_printf(db->command, "$18\r\nRAY.TASK_TABLE_ADD\r\n$%d\r\n", sizeof(task_id.id));
+  utstring_bincpy(db->command, task_id.id, sizeof(task_id.id));
+  utstring_printf(db->command, "\r\n$1\r\n%d\r\n$%d\r\n", state, sizeof(local_scheduler_id.id));
+  utstring_bincpy(db->command, local_scheduler_id.id, sizeof(local_scheduler_id.id));
+  utstring_printf(db->command, "\r\n$%d\r\n", Task_task_spec_size(task));
+  utstring_bincpy(db->command, spec, Task_task_spec_size(task));
+  utstring_printf(db->command, "\r\n");
+  int status = redisAsyncFormattedCommand(
       context, redis_task_table_add_task_callback,
-      (void *) callback_data->timer_id, "RAY.TASK_TABLE_ADD %b %d %b %b",
-      task_id.id, sizeof(task_id.id), state, local_scheduler_id.id,
-      sizeof(local_scheduler_id.id), spec, Task_task_spec_size(task));
+      (void *) callback_data->timer_id,
+      utstring_body(db->command), utstring_len(db->command));
+  utstring_clear(db->command);
   if ((status == REDIS_ERR) || context->err) {
     LOG_REDIS_DEBUG(context, "error in redis_task_table_add_task");
   }
@@ -836,10 +879,10 @@ void redis_task_table_update(TableCallbackData *callback_data) {
 
   CHECKM(task != NULL, "NULL task passed to redis_task_table_update.");
   int status = redisAsyncCommand(
-      context, redis_task_table_update_callback,
-      (void *) callback_data->timer_id, "RAY.TASK_TABLE_UPDATE %b %d %b",
-      task_id.id, sizeof(task_id.id), state, local_scheduler_id.id,
-      sizeof(local_scheduler_id.id));
+    db->context, redis_task_table_update_callback,
+    (void *) callback_data->timer_id, "RAY.TASK_TABLE_UPDATE %b %d %b",
+    task_id.id, sizeof(task_id.id), state, local_scheduler_id.id,
+    sizeof(local_scheduler_id.id));
   if ((status == REDIS_ERR) || context->err) {
     LOG_REDIS_DEBUG(context, "error in redis_task_table_update");
   }

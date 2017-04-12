@@ -54,6 +54,12 @@ struct DBHandle {
    *  rarely, it is not asynchronous. */
   redisContext *sync_context;
   std::vector<redisContext*> sync_contexts;
+  /** String for constructing redis commands. */
+  UT_string *command;
+  std::vector<char> result_table_buffer;
+  int64_t result_table_first_index;
+  int64_t result_table_second_index;
+  int64_t result_table_third_index;
 };
 
 void redis_object_table_get_entry(redisAsyncContext *c,
