@@ -3,7 +3,7 @@
 #include <inttypes.h>
 #include "redis.h"
 
-static int64_t timer_id_next = 1;
+static int64_t timer_id_next = 100;
 
 /* The default behavior is to retry every ten seconds forever. */
 static const RetryInfo default_retry = {.num_retries = -1,
