@@ -582,6 +582,15 @@ int fetch_object_timeout_handler(event_loop *loop, timer_id id, void *context) {
  */
 void dispatch_tasks(LocalSchedulerState *state,
                     SchedulingAlgorithmState *algorithm_state) {
+  /* If there are more tasks than the maximum number of CPUs, wait for all CPUs
+   * to become available again before dispatching again. */
+  if (algorithm_state->dispatch_task_queue->size() >
+      state->static_resources[0]) {
+    if (state->dynamic_resources[0] < state->static_resources[0]) {
+      return;
+    }
+  }
+
   /* Assign as many tasks as we can, while there are workers available. */
   for (auto it = algorithm_state->dispatch_task_queue->begin();
        it != algorithm_state->dispatch_task_queue->end();) {
