@@ -1015,7 +1015,7 @@ void handle_worker_available(LocalSchedulerState *state,
 
   /* Try to dispatch tasks, since we now have available workers to assign them
    * to. */
-  dispatch_tasks(state, algorithm_state);
+  //dispatch_tasks(state, algorithm_state);
 }
 
 void handle_worker_removed(LocalSchedulerState *state,
