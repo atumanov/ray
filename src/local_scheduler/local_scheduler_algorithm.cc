@@ -547,6 +547,7 @@ bool can_run(SchedulingAlgorithmState *algorithm_state, TaskSpec *task) {
 
 /* TODO(swang): This method is not covered by any valgrind tests. */
 int fetch_object_timeout_handler(event_loop *loop, timer_id id, void *context) {
+  printf("inside fetch_object_timeout_handler\n");
   LocalSchedulerState *state = (LocalSchedulerState *) context;
   /* Only try the fetches if we are connected to the object store manager. */
   if (!plasma_manager_is_connected(state->plasma_conn)) {
@@ -584,12 +585,12 @@ void dispatch_tasks(LocalSchedulerState *state,
                     SchedulingAlgorithmState *algorithm_state) {
   /* If there are more tasks than the maximum number of CPUs, wait for all CPUs
    * to become available again before dispatching again. */
-  if (algorithm_state->dispatch_task_queue->size() >
-      state->static_resources[0]) {
-    if (state->dynamic_resources[0] < state->static_resources[0]) {
-      return;
-    }
-  }
+//  if (algorithm_state->dispatch_task_queue->size() >
+//      state->static_resources[0]) {
+//    if (state->dynamic_resources[0] < state->static_resources[0]) {
+//      return;
+//    }
+//  }
 
   /* Assign as many tasks as we can, while there are workers available. */
   for (auto it = algorithm_state->dispatch_task_queue->begin();
@@ -862,7 +863,7 @@ void handle_task_submitted(LocalSchedulerState *state,
   }
 
   /* Try to dispatch tasks, since we may have added one to the queue. */
-  dispatch_tasks(state, algorithm_state);
+  //dispatch_tasks(state, algorithm_state);
 }
 
 void handle_actor_task_submitted(LocalSchedulerState *state,
@@ -939,7 +940,7 @@ void handle_task_scheduled(LocalSchedulerState *state,
   DCHECK(state->config.global_scheduler_exists);
   /* Push the task to the appropriate queue. */
   queue_task_locally(state, algorithm_state, spec, task_spec_size, true);
-  dispatch_tasks(state, algorithm_state);
+  //dispatch_tasks(state, algorithm_state);
 }
 
 void handle_actor_task_scheduled(LocalSchedulerState *state,
@@ -1107,7 +1108,7 @@ void handle_worker_blocked(LocalSchedulerState *state,
       update_dynamic_resources(state, spec, true);
 
       /* Try to dispatch tasks, since we may have freed up some resources. */
-      dispatch_tasks(state, algorithm_state);
+      //dispatch_tasks(state, algorithm_state);
       return;
     }
   }
@@ -1199,7 +1200,7 @@ void handle_object_available(LocalSchedulerState *state,
     }
     /* Try to dispatch tasks, since we may have added some from the waiting
      * queue. */
-    dispatch_tasks(state, algorithm_state);
+    //dispatch_tasks(state, algorithm_state);
     /* Clean up the records for dependent tasks. */
     entry->dependent_tasks->clear();
   }
