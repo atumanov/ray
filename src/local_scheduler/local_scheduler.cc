@@ -908,7 +908,6 @@ int heartbeat_handler(event_loop *loop, timer_id id, void *context) {
 }
 
 int scheduling_interval_handler(event_loop *loop, timer_id id, void *context) {
-  printf("inside scheduling_interval_handler\n");
   LocalSchedulerState *state = (LocalSchedulerState *) context;
   SchedulingAlgorithmState *algorithm_state = state->algorithm_state;
   dispatch_tasks(state, algorithm_state);
@@ -926,7 +925,6 @@ void start_server(const char *node_ip_address,
                   const double static_resource_conf[],
                   const char *start_worker_command,
                   int num_workers) {
-  printf("start_server\n");
   /* Ignore SIGPIPE signals. If we don't do this, then when we attempt to write
    * to a client that has already died, the local scheduler could die. */
   signal(SIGPIPE, SIG_IGN);
@@ -961,7 +959,6 @@ void start_server(const char *node_ip_address,
     event_loop_add_timer(loop, HEARTBEAT_TIMEOUT_MILLISECONDS,
                          heartbeat_handler, g_state);
   }
-  printf("start_server:adding timers\n");
   /* Create a timer for fetching queued tasks' missing object dependencies. */
   event_loop_add_timer(loop, LOCAL_SCHEDULER_FETCH_TIMEOUT_MILLISECONDS,
                        fetch_object_timeout_handler, g_state);
@@ -969,7 +966,6 @@ void start_server(const char *node_ip_address,
   event_loop_add_timer(loop, SCHEDULING_INTERVAL_MS,
                        scheduling_interval_handler, g_state);
   /* Run event loop. */
-  printf("start_server: starting event loop\n");
   event_loop_run(loop);
 }
 

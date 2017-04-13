@@ -547,7 +547,6 @@ bool can_run(SchedulingAlgorithmState *algorithm_state, TaskSpec *task) {
 
 /* TODO(swang): This method is not covered by any valgrind tests. */
 int fetch_object_timeout_handler(event_loop *loop, timer_id id, void *context) {
-  printf("inside fetch_object_timeout_handler\n");
   LocalSchedulerState *state = (LocalSchedulerState *) context;
   /* Only try the fetches if we are connected to the object store manager. */
   if (!plasma_manager_is_connected(state->plasma_conn)) {
