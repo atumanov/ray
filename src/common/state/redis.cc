@@ -879,7 +879,7 @@ void redis_task_table_update(TableCallbackData *callback_data) {
 
   CHECKM(task != NULL, "NULL task passed to redis_task_table_update.");
   int status = redisAsyncCommand(
-    db->context, redis_task_table_update_callback,
+    context, redis_task_table_update_callback,
     (void *) callback_data->timer_id, "RAY.TASK_TABLE_UPDATE %b %d %b",
     task_id.id, sizeof(task_id.id), state, local_scheduler_id.id,
     sizeof(local_scheduler_id.id));

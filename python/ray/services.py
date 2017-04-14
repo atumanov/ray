@@ -787,7 +787,7 @@ def start_ray_processes(address_info=None,
     redis_stdout_file, redis_stderr_file = new_log_files("redis",
                                                          redirect_output)
     ips = []
-    fp = file('/home/ubuntu/redis_shards.txt', 'r')
+    fp = open('/home/ubuntu/redis_shards.txt', 'r')
     for line in fp.readlines():
         ips.append(line.strip())
     fp.close()
