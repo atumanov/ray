@@ -22,11 +22,11 @@ extern "C" {
 
 /** The duration between heartbeats. These are sent by the plasma manager and
  *  local scheduler. */
-#define HEARTBEAT_TIMEOUT_MILLISECONDS 100
+#define HEARTBEAT_TIMEOUT_MILLISECONDS 10000
 /** If a component has not sent a heartbeat in the last NUM_HEARTBEATS_TIMEOUT
  *  heartbeat intervals, the global scheduler or monitor process will report it
  *  as dead to the db_client table. */
-#define NUM_HEARTBEATS_TIMEOUT 100
+#define NUM_HEARTBEATS_TIMEOUT 10000
 #define SCHEDULING_INTERVAL_MS  1
 
 /** Definitions for Ray logging levels. */
