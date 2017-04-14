@@ -198,6 +198,7 @@ def record_log_files_in_redis(redis_address, node_ip_address, log_files):
   """
   for log_file in log_files:
     if log_file is not None:
+      print(redis_address)
       redis_ip_address, redis_port = redis_address.split(":")
       redis_client = redis.StrictRedis(host=redis_ip_address, port=redis_port)
       # The name of the key storing the list of log filenames for this IP
@@ -242,6 +243,23 @@ def wait_for_redis_to_start(redis_ip_address, redis_port, num_retries=5):
                     "a different machine, check that your firewall is "
                     "configured properly.")
 
+def configure_redis(node_ip_address="127.0.0.1", port=6379):
+  # Create a Redis client just for configuring Redis.
+  redis_client = redis.StrictRedis(host=node_ip_address, port=port)
+  # Wait for the Redis server to start.
+  wait_for_redis_to_start(node_ip_address, port)
+  # Configure Redis to generate keyspace notifications. TODO(rkn): Change this
+  # to only generate notifications for the export keys.
+  redis_client.config_set("notify-keyspace-events", "Kl")
+  # Configure Redis to not run in protected mode so that processes on other
+  # hosts can connect to it. TODO(rkn): Do this in a more secure way.
+  redis_client.config_set("protected-mode", "no")
+  cur_config = redis_client.config_get("client-output-buffer-limit")["client-output-buffer-limit"]
+  cur_config_list = cur_config.split()
+  cur_config_list[8:] = ['pubsub', '134217728', '134217728', '60']
+  redis_client.config_set("client-output-buffer-limit", " ".join(cur_config_list))
+  # Put a time stamp in Redis to indicate when it was started.
+  redis_client.set("redis_start_time", time.time())
 
 def start_redis(node_ip_address="127.0.0.1", port=None, num_retries=20,
                 stdout_file=None, stderr_file=None, cleanup=True):
@@ -302,22 +320,7 @@ def start_redis(node_ip_address="127.0.0.1", port=None, num_retries=20,
   if counter == num_retries:
     raise Exception("Couldn't start Redis.")
 
-  # Create a Redis client just for configuring Redis.
-  redis_client = redis.StrictRedis(host="127.0.0.1", port=port)
-  # Wait for the Redis server to start.
-  wait_for_redis_to_start("127.0.0.1", port)
-  # Configure Redis to generate keyspace notifications. TODO(rkn): Change this
-  # to only generate notifications for the export keys.
-  redis_client.config_set("notify-keyspace-events", "Kl")
-  # Configure Redis to not run in protected mode so that processes on other
-  # hosts can connect to it. TODO(rkn): Do this in a more secure way.
-  redis_client.config_set("protected-mode", "no")
-  cur_config = redis_client.config_get("client-output-buffer-limit")["client-output-buffer-limit"]
-  cur_config_list = cur_config.split()
-  cur_config_list[8:] = ['pubsub', '134217728', '134217728', '60']
-  redis_client.config_set("client-output-buffer-limit", " ".join(cur_config_list))
-  # Put a time stamp in Redis to indicate when it was started.
-  redis_client.set("redis_start_time", time.time())
+  configure_redis("127.0.0.1", port=port)
   # Record the log files in Redis.
   record_log_files_in_redis(address(node_ip_address, port), node_ip_address,
                             [stdout_file, stderr_file])
@@ -783,25 +786,41 @@ def start_ray_processes(address_info=None,
   if include_redis:
     redis_stdout_file, redis_stderr_file = new_log_files("redis",
                                                          redirect_output)
+    ips = []
+    fp = file('/home/ubuntu/redis_shards.txt', 'r')
+    for line in fp.readlines():
+        ips.append(line.strip())
+    fp.close()
+    print(ips)
+
     if redis_address is None:
-      # Start primary redis instance. The start_redis method will choose a
-      # random port.
-      redis_port, _ = start_redis(node_ip_address,
-                                    stdout_file=redis_stdout_file,
-                                    stderr_file=redis_stderr_file,
-                                    cleanup=cleanup)
-      redis_address = address(node_ip_address, redis_port)
+    #  # Start primary redis instance. The start_redis method will choose a
+    #  # random port.
+    #  redis_port, _ = start_redis(node_ip_address,
+    #                                stdout_file=redis_stdout_file,
+    #                                stderr_file=redis_stderr_file,
+    #                                cleanup=cleanup)
+    #  redis_address = address(node_ip_address, redis_port)
+    #  address_info["redis_address"] = redis_address
+    #  # Start other redis shards.
+    #  redis_shards = [redis_address]
+    #  for i in range(num_redis_shards - 1):
+    #    # Start a Redis server. The start_redis method will choose a random port.
+    #    redis_port, _ = start_redis(node_ip_address,
+    #                                stdout_file=redis_stdout_file,
+    #                                stderr_file=redis_stderr_file,
+    #                                cleanup=cleanup)
+    #    redis_shards.append(address(node_ip_address, redis_port))
+      #redis_shards = address_info["redis_shards"] = "[" + ",".join(redis_shards) + "]"
+      #explicitly call the redis configuration code for each shard.
+      for shardstr in ips:
+        ip,port = shardstr.split(':')
+        port = int(port)
+        configure_redis(ip, port)
+
+      redis_shards = address_info["redis_shards"] = "[" + ",".join(ips) + "]"
+      redis_address = ips[0]
       address_info["redis_address"] = redis_address
-      # Start other redis shards.
-      redis_shards = [redis_address]
-      for i in range(num_redis_shards - 1):
-        # Start a Redis server. The start_redis method will choose a random port.
-        redis_port, _ = start_redis(node_ip_address,
-                                    stdout_file=redis_stdout_file,
-                                    stderr_file=redis_stderr_file,
-                                    cleanup=cleanup)
-        redis_shards.append(address(node_ip_address, redis_port))
-      redis_shards = address_info["redis_shards"] = "[" + ",".join(redis_shards) + "]"
       # Expected format: "[IP1:PORT1,IP2:PORT2]"
       time.sleep(0.1)
     else:
