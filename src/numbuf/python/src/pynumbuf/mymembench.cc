@@ -17,6 +17,7 @@
 
 #include <sys/types.h>          /* See NOTES */
 #include <sys/socket.h>
+#include <sys/un.h>
 
 using namespace std;
 
@@ -62,6 +63,68 @@ int create_buffer(int64_t size) {
   }
 #endif
   return fd;
+}
+
+int bind_ipc_sock(const char *socket_pathname) {
+  struct sockaddr_un socket_address;
+  int socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (socket_fd < 0) {
+    return -1;
+  }
+  /* Tell the system to allow the port to be reused. */
+  int on = 1;
+  if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, (char *) &on,
+                 sizeof(on)) < 0) {
+    close(socket_fd);
+    return -1;
+  }
+
+  unlink(socket_pathname);
+  memset(&socket_address, 0, sizeof(socket_address));
+  socket_address.sun_family = AF_UNIX;
+  if (strlen(socket_pathname) + 1 > sizeof(socket_address.sun_path)) {
+    close(socket_fd);
+    return -1;
+  }
+  strncpy(socket_address.sun_path, socket_pathname,
+          strlen(socket_pathname) + 1);
+
+  if (bind(socket_fd, (struct sockaddr *) &socket_address,
+           sizeof(socket_address)) != 0) {
+    close(socket_fd);
+    return -1;
+  }
+  if (listen(socket_fd, 5) == -1) {
+    close(socket_fd);
+    return -1;
+  }
+  return socket_fd;
+}
+
+int connect_ipc_sock(const char *socket_pathname) {
+  struct sockaddr_un socket_address;
+  int socket_fd;
+
+  socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (socket_fd < 0) {
+    return -1;
+  }
+
+  memset(&socket_address, 0, sizeof(socket_address));
+  socket_address.sun_family = AF_UNIX;
+  if (strlen(socket_pathname) + 1 > sizeof(socket_address.sun_path)) {
+    return -1;
+  }
+  strncpy(socket_address.sun_path, socket_pathname,
+          strlen(socket_pathname) + 1);
+
+  if (connect(socket_fd, (struct sockaddr *) &socket_address,
+              sizeof(socket_address)) != 0) {
+    close(socket_fd);
+    return -1;
+  }
+
+  return socket_fd;
 }
 
 void init_msg(struct msghdr *msg,
@@ -486,7 +549,8 @@ int main(int argc, char **argv) {
     // number of megabytes was specified
     NUMMB = atol(argv[2]);
   }
-  const uint64_t nbytes = NUMMB * (1<<20);
+  const uint64_t nbytes = 200015872;
+  const bool is_child = atoi(argv[3]);
   //int rv = posix_memalign((void **)&dst, 64, nbytes);
 
   switch(expnum) {
@@ -506,15 +570,9 @@ int main(int argc, char **argv) {
       if (src) free(src);
       src = alloc_randombytes(nbytes);
 
-      int sockets[2];
-      static const int parentsocket = 0;
-      static const int childsocket = 1;
-      socketpair(PF_LOCAL, SOCK_STREAM, 0, sockets);
-
-      pid_t pid = fork();
-      if (pid == 0) {
-        close(sockets[parentsocket]);
-        int fd = recv_fd(sockets[childsocket]);
+      if (is_child) {
+        int server_fd = connect_ipc_sock("membench-sock");
+        int fd = recv_fd(server_fd);
         dst = reinterpret_cast<uint64_t *>(get_pointer_from_file(fd, nbytes*2));
         gettimeofday(&tv1, NULL);
         memcopy_helper.memcopy(reinterpret_cast<uint8_t *>(dst),
@@ -525,9 +583,10 @@ int main(int argc, char **argv) {
                nbytes, elapsed, nbytes/((1<<20)*elapsed));
         exit(0);
       } else {
-        close(sockets[childsocket]);
         int fd = do_mmap(nbytes*2);
-        send_fd(sockets[parentsocket], fd);
+        int listen_fd = bind_ipc_sock("membench-sock");
+        int client_fd = accept(listen_fd, NULL, NULL);
+        send_fd(client_fd, fd);
         dst = reinterpret_cast<uint64_t *>(get_pointer_from_file(fd, nbytes*2));
         wait(pid);
       }
