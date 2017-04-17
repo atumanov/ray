@@ -1,7 +1,6 @@
 #ifndef PLASMA_H
 #define PLASMA_H
 
-#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -11,6 +10,7 @@
 #include <unistd.h> /* pid_t */
 
 #include "common.h"
+#include <inttypes.h>
 #include "format/common_generated.h"
 
 #include "utarray.h"
