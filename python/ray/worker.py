@@ -1343,6 +1343,7 @@ def connect(info, object_id_seed=None, mode=WORKER_MODE, worker=global_worker,
   # which is important because we will append to this field from multiple
   # threads.
   worker.events = []
+  worker.event_log = []
   # If running Ray in PYTHON_MODE, there is no need to create call
   # create_worker or to start the worker service.
   if mode == PYTHON_MODE:
@@ -1611,9 +1612,25 @@ def flush_log(worker=global_worker):
   event_log_key = (b"event_log:" + worker.worker_id + b":" +
                    worker.current_task_id.id())
   event_log_value = json.dumps(worker.events)
-  worker.local_scheduler_client.log_event(event_log_key, event_log_value)
+  worker.redis_client.rpush(event_log_key, event_log_value)
+  #worker.local_scheduler_client.log_event(event_log_key, event_log_value)
   worker.events = []
 
+def stash_log(worker=global_worker):
+  """Save worker events ."""
+  event_log_key = (b"event_log:" + worker.worker_id + b":" +
+                   worker.current_task_id.id())
+  event_log_value = json.dumps(worker.events)
+  # Stash this event log.
+  worker.event_log.append((event_log_key,event_log_value))
+  worker.events = []
+
+def flush_event_log(worker=global_worker):
+  """Send the saved  worker event log to the global state store."""
+  for k,v in worker.event_log:
+    worker.redis_client.rpush(k,v)
+    #worker.local_scheduler_client.log_event(k,v)
+  worker.event_log = []
 
 def get(object_ids, worker=global_worker):
   """Get a remote object or a list of remote objects from the object store.
@@ -1909,6 +1926,7 @@ def main_loop(worker=global_worker):
 
     # Push all of the log events to the global state store.
     #flush_log()
+    stash_log()
 
 
 def _submit_task(function_id, func_name, args, worker=global_worker):
