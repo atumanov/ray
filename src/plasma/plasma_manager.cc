@@ -660,6 +660,7 @@ void send_queued_request(event_loop *loop,
 
   /* If there was a SIGPIPE, stop sending to this manager. */
   if (sigpipe) {
+    event_loop_remove_file(loop, conn->fd);
     ClientConnection_free(conn);
     return;
   }
@@ -817,8 +818,12 @@ void process_transfer_request(event_loop *loop,
   /* If we already have a connection to this manager and its inactive,
    * (re)register it with the event loop again. */
   if (manager_conn->transfer_queue == NULL) {
-    event_loop_add_file(loop, manager_conn->fd, EVENT_LOOP_WRITE,
+    bool success = event_loop_add_file(loop, manager_conn->fd, EVENT_LOOP_WRITE,
                         send_queued_request, manager_conn);
+    if (!success) {
+      ClientConnection_free(manager_conn);
+      return;
+    }
   }
 
   DCHECK(object_buffer.metadata ==
@@ -881,8 +886,11 @@ void process_data_request(event_loop *loop,
    * other requests. */
   event_loop_remove_file(loop, client_sock);
   if (error_code == PlasmaError_OK) {
-    event_loop_add_file(loop, client_sock, EVENT_LOOP_READ, process_data_chunk,
+    bool success = event_loop_add_file(loop, client_sock, EVENT_LOOP_READ, process_data_chunk,
                         conn);
+    if (!success) {
+      ClientConnection_free(conn);
+    }
   } else {
     /* Since plasma_create() has failed, we ignore the data transfer. We will
      * receive this transfer in g_ignore_buf and then drop it. Allocate memory
@@ -890,8 +898,11 @@ void process_data_request(event_loop *loop,
      * buf/g_ignore_buf will be freed in ignore_data_chunkc(). */
     conn->ignore_buffer = buf;
     buf->data = (uint8_t *) malloc(buf->data_size + buf->metadata_size);
-    event_loop_add_file(loop, client_sock, EVENT_LOOP_READ, ignore_data_chunk,
+    bool success = event_loop_add_file(loop, client_sock, EVENT_LOOP_READ, ignore_data_chunk,
                         conn);
+    if (!success) {
+      ClientConnection_free(conn);
+    }
   }
 }
 
