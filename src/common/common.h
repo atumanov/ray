@@ -158,6 +158,14 @@ typedef UniqueID ObjectID;
 
 #ifdef __cplusplus
 size_t hashObjectID(const ObjectID &key);
+struct UniqueIDHasher {
+  /* ObjectID hashing function. */
+  size_t operator()(const UniqueID &id) const {
+    size_t result;
+    memcpy(&result, id.id, sizeof(size_t));
+    return result;
+  }
+};
 bool operator==(const ObjectID& x, const ObjectID& y);
 #endif
 
