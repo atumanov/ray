@@ -1,7 +1,7 @@
 #!/bin/sh
 
 REDIS_PORT_START=$1
-RAY_HOME=/data/atumanov/ray
+RAY_HOME=$HOME/ray
 
 for i in $(seq 0 9); do
   redis_port=`expr $REDIS_PORT_START + $i` 
