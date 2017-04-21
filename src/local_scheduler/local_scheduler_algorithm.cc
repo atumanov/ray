@@ -833,7 +833,7 @@ bool resource_constraints_satisfied(LocalSchedulerState *state,
     if (TaskSpec_get_required_resource(spec, i) > state->static_resources[i] ||
         ((TaskSpec_get_required_resource(spec, i) > state->dynamic_resources[i])
         && (state->algorithm_state->dispatch_task_queue->size() >
-            10000 * state->static_resources[ResourceIndex_CPU]))){
+            1000 * state->static_resources[ResourceIndex_CPU]))){
       return false;
     }
   }
