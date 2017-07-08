@@ -6,6 +6,7 @@
 #include "bytesobject.h"
 
 #include <iostream>
+#include <chrono>
 
 #ifdef HAS_PLASMA
 // This needs to be included before plasma_protocol. We cannot include it in
@@ -178,7 +179,7 @@ static PyObject* write_to_buffer(PyObject* self, PyObject* args) {
       LENGTH_PREFIX_SIZE + reinterpret_cast<uint8_t*>(buffer->buf),
       buffer->len - LENGTH_PREFIX_SIZE);
   auto target = std::make_shared<arrow::io::FixedSizeBufferWriter>(buf);
-  target->set_memcopy_threads(8);
+  target->set_memcopy_threads(1);
   int64_t batch_size, total_size;
   ARROW_CHECK_OK(write_batch_and_tensors(
       target.get(), object->batch, object->arrays, &batch_size, &total_size));
@@ -281,6 +282,7 @@ static void BufferCapsule_Destructor(PyObject* capsule) {
  * @return None.
  */
 static PyObject* store_list(PyObject* self, PyObject* args) {
+  auto start_time = std::chrono::high_resolution_clock::now();
   ObjectID obj_id;
   PlasmaClient* client;
   PyObject* value;
@@ -309,7 +311,9 @@ static PyObject* store_list(PyObject* self, PyObject* args) {
    * stored in the plasma data buffer. The header end offset is stored in
    * the first LENGTH_PREFIX_SIZE bytes of the data buffer. The RecordBatch
    * data is stored after that. */
+  auto create_t1 = std::chrono::high_resolution_clock::now();
   s = client->Create(obj_id, LENGTH_PREFIX_SIZE + total_size, NULL, 0, &data);
+  auto create_t2 = std::chrono::high_resolution_clock::now();
   if (s.IsPlasmaObjectExists()) {
     PyErr_SetString(NumbufPlasmaObjectExistsError,
         "An object with this ID already exists in the plasma "
@@ -327,14 +331,21 @@ static PyObject* store_list(PyObject* self, PyObject* args) {
   auto buf =
       std::make_shared<arrow::MutableBuffer>(LENGTH_PREFIX_SIZE + data, total_size);
   auto target = std::make_shared<arrow::io::FixedSizeBufferWriter>(buf);
-  target->set_memcopy_threads(8);
+  target->set_memcopy_threads(1);
+  auto write_t1 = std::chrono::high_resolution_clock::now();
   write_batch_and_tensors(target.get(), batch, tensors, &data_size, &total_size);
+  auto write_t2 = std::chrono::high_resolution_clock::now();
   *((int64_t*)data) = data_size;
 
   /* Do the plasma_release corresponding to the call to plasma_create. */
   ARROW_CHECK_OK(client->Release(obj_id));
   /* Seal the object. */
   ARROW_CHECK_OK(client->Seal(obj_id));
+  auto finish_time = std::chrono::high_resolution_clock::now();
+  std::cerr << "create (ns): " << std::chrono::duration_cast<std::chrono::nanoseconds>(create_t2 - create_t1).count() << std::endl;
+  std::cerr << "write (ns): " << std::chrono::duration_cast<std::chrono::nanoseconds>(write_t2 - write_t1).count() << std::endl;
+  std::cerr << "finish (ns): " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish_time - write_t2).count() << std::endl;
+  std::cerr << "total (ns): " <<std::chrono::duration_cast<std::chrono::nanoseconds>(finish_time - start_time).count() << std::endl;
   Py_RETURN_NONE;
 }
 

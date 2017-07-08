@@ -5,6 +5,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <chrono>
+#include <iostream>
 
 #include <unordered_map>
 
@@ -104,11 +106,16 @@ void *fake_mmap(size_t size) {
   /* Add sizeof(size_t) so that the returned pointer is deliberately not
    * page-aligned. This ensures that the segments of memory returned by
    * fake_mmap are never contiguous. */
+  //FIXME: for debugging override size with a big number
+  //size = 10000000000UL; //10GB
   size += sizeof(size_t);
 
   int fd = create_buffer(size);
   CHECKM(fd >= 0, "Failed to create buffer during mmap");
+  auto t1 = std::chrono::high_resolution_clock::now();
   void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  auto t2 = std::chrono::high_resolution_clock::now();
+  auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1);
   if (pointer == MAP_FAILED) {
     return pointer;
   }
@@ -122,7 +129,8 @@ void *fake_mmap(size_t size) {
 
   /* We lie to dlmalloc about where mapped memory actually lives. */
   pointer = pointer_advance(pointer, sizeof(size_t));
-  LOG_DEBUG("%p = fake_mmap(%lu)", pointer, size);
+  LOG_INFO("%p = fake_mmap(%lu), nanos=%f", pointer, size, nanos.count());
+  std::cerr << "fake_mmap time = " << nanos.count() << " ns" << std::endl;
   return pointer;
 }
 

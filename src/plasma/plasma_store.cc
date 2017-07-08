@@ -28,6 +28,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <iostream>
+#include <chrono>
 
 #include "plasma_common.h"
 #include "plasma_store.h"
@@ -118,6 +120,8 @@ int PlasmaStore::create_object(ObjectID object_id,
                                int64_t metadata_size,
                                Client *client,
                                PlasmaObject *result) {
+  using namespace std::chrono;
+  auto start_time = high_resolution_clock::now();
   ARROW_LOG(DEBUG) << "creating object " << object_id.hex();
   if (store_info_.objects.count(object_id) != 0) {
     // There is already an object with the same ID in the Plasma Store, so
@@ -126,6 +130,7 @@ int PlasmaStore::create_object(ObjectID object_id,
   }
   // Try to evict objects until there is enough space.
   uint8_t *pointer;
+  high_resolution_clock::time_point dlmalloc_t1, dlmalloc_t2, dlmalloc_t3;
   do {
     // Allocate space for the new object. We use dlmemalign instead of dlmalloc
     // in order to align the allocated region to a 64-byte boundary. This is not
@@ -134,7 +139,9 @@ int PlasmaStore::create_object(ObjectID object_id,
     // plasma_client.cc). Note that even though this pointer is 64-byte aligned,
     // it is not guaranteed that the corresponding pointer in the client will be
     // 64-byte aligned, but in practice it often will be.
+    dlmalloc_t1 = high_resolution_clock::now();
     pointer = (uint8_t *) dlmemalign(BLOCK_SIZE, data_size + metadata_size);
+    dlmalloc_t2 = high_resolution_clock::now();
     if (pointer == NULL) {
       // Tell the eviction policy how much space we need to create this object.
       std::vector<ObjectID> objects_to_evict;
@@ -147,6 +154,7 @@ int PlasmaStore::create_object(ObjectID object_id,
         return PlasmaError_OutOfMemory;
       }
     }
+    dlmalloc_t3 = high_resolution_clock::now();
   } while (pointer == NULL);
   int fd;
   int64_t map_size;
@@ -179,6 +187,11 @@ int PlasmaStore::create_object(ObjectID object_id,
   eviction_policy_.object_created(object_id);
   // Record that this client is using this object.
   add_client_to_object_clients(store_info_.objects[object_id].get(), client);
+  auto finish_time = high_resolution_clock::now();
+  std::cerr << "objstore:create_object:total(ns): " << std::chrono::duration_cast<std::chrono::nanoseconds>(finish_time - start_time).count()<< std::endl;
+  std::cerr << "objstore:create_object:dlmemalign(ns): " << std::chrono::duration_cast<std::chrono::nanoseconds>(dlmalloc_t2-dlmalloc_t1).count()<< std::endl;
+  std::cerr << "objstore:create_object:evict(ns): " << std::chrono::duration_cast<std::chrono::nanoseconds>(dlmalloc_t3-dlmalloc_t2).count()<< std::endl;
+
   return PlasmaError_OK;
 }
 
