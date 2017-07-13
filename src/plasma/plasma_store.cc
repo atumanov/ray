@@ -28,6 +28,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <chrono>
 
 #include "plasma_common.h"
 #include "plasma_store.h"
@@ -118,6 +119,7 @@ int PlasmaStore::create_object(ObjectID object_id,
                                int64_t metadata_size,
                                Client *client,
                                PlasmaObject *result) {
+  auto create_start = std::chrono::high_resolution_clock::now();
   ARROW_LOG(DEBUG) << "creating object " << object_id.hex();
   if (store_info_.objects.count(object_id) != 0) {
     // There is already an object with the same ID in the Plasma Store, so
@@ -134,7 +136,9 @@ int PlasmaStore::create_object(ObjectID object_id,
     // plasma_client.cc). Note that even though this pointer is 64-byte aligned,
     // it is not guaranteed that the corresponding pointer in the client will be
     // 64-byte aligned, but in practice it often will be.
+    auto mem_start = std::chrono::high_resolution_clock::now();
     pointer = (uint8_t *) dlmemalign(BLOCK_SIZE, data_size + metadata_size);
+    auto mem_end = std::chrono::high_resolution_clock::now();
     if (pointer == NULL) {
       // Tell the eviction policy how much space we need to create this object.
       std::vector<ObjectID> objects_to_evict;
@@ -147,6 +151,9 @@ int PlasmaStore::create_object(ObjectID object_id,
         return PlasmaError_OutOfMemory;
       }
     }
+    std::cout << "dlmemalign (us): " 
+              << std::chrono::duration_cast<std::chrono::microseconds>(mem_end - mem_start).count() 
+              << std::endl;
   } while (pointer == NULL);
   int fd;
   int64_t map_size;
@@ -179,6 +186,12 @@ int PlasmaStore::create_object(ObjectID object_id,
   eviction_policy_.object_created(object_id);
   // Record that this client is using this object.
   add_client_to_object_clients(store_info_.objects[object_id].get(), client);
+
+  auto create_end = std::chrono::high_resolution_clock::now();
+  std::cout << "create_object (us): " 
+            << std::chrono::duration_cast<std::chrono::microseconds>(create_end - create_start).count() 
+            << std::endl;
+
   return PlasmaError_OK;
 }
 

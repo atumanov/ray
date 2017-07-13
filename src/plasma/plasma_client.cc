@@ -25,6 +25,7 @@
 
 #include <vector>
 #include <thread>
+#include <chrono>
 
 extern "C" {
 #include "sha256.h"
@@ -82,7 +83,10 @@ uint8_t *lookup_or_mmap(PlasmaClient *conn,
     if (result == MAP_FAILED) {
       ARROW_LOG(FATAL) << "mmap failed";
     }
-    close(fd);
+    //int rv = mlock(result, map_size);
+    // Best effort mlock: ignore mlock failure.
+    //std::cout << "client mlock success " << rv << std::endl;
+    close(fd); // PERF: closing or not closing this fd has an effect on performance
     ClientMmapTableEntry *entry = new ClientMmapTableEntry();
     entry->pointer = result;
     entry->length = map_size;
@@ -440,7 +444,8 @@ bool plasma_compute_object_hash(PlasmaClient *conn,
     return false;
   }
   // Compute the hash.
-  hash = compute_object_hash(obj_buffer);
+  hash = 0; //compute_object_hash(obj_buffer);
+  //hash = compute_object_hash(obj_buffer);
   memcpy(digest, &hash, sizeof(hash));
   // Release the plasma object.
   ARROW_CHECK_OK(conn->Release(obj_id));
@@ -458,7 +463,12 @@ Status PlasmaClient::Seal(ObjectID object_id) {
   object_entry->second->is_sealed = true;
   /// Send the seal request to Plasma.
   static unsigned char digest[kDigestSize];
+  auto ohash_start = std::chrono::high_resolution_clock::now();
   ARROW_CHECK(plasma_compute_object_hash(this, object_id, &digest[0]));
+  auto ohash_end = std::chrono::high_resolution_clock::now();
+  std::cout << "client compute_object_hash (us) "
+            << std::chrono::duration_cast<std::chrono::microseconds>(ohash_end - ohash_start).count()
+            << std::endl;
   RETURN_NOT_OK(SendSealRequest(store_conn, object_id, &digest[0]));
   // We call PlasmaClient::Release to decrement the number of instances of this
   // object

@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <unordered_map>
+#include <iostream>
 
 #include "common.h"
 
@@ -21,7 +22,7 @@ int fake_munmap(void *, size_t);
 #define USE_DL_PREFIX
 #define HAVE_MORECORE 0
 #define DEFAULT_MMAP_THRESHOLD MAX_SIZE_T
-#define DEFAULT_GRANULARITY ((size_t) 512U * 1024U * 1024U)
+#define DEFAULT_GRANULARITY ((size_t) 1024U * 1024U * 1024U) //1GB
 
 #include "thirdparty/dlmalloc.c"
 
@@ -104,12 +105,21 @@ void *fake_mmap(size_t size) {
   /* Add sizeof(size_t) so that the returned pointer is deliberately not
    * page-aligned. This ensures that the segments of memory returned by
    * fake_mmap are never contiguous. */
+  using namespace std;
   size += sizeof(size_t);
 
   int fd = create_buffer(size);
   CHECKM(fd >= 0, "Failed to create buffer during mmap");
 #ifdef __linux__
-  void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd, 0);
+  //void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  void *pointer = mmap(NULL, size, PROT_WRITE, MAP_SHARED | MAP_LOCKED, fd, 0);
+  if (pointer == MAP_FAILED) {
+    cout << "mmap failed" << endl;
+    return pointer;
+  }
+  int rv = mlock(pointer, size);
+  cout << "mlocking pointer " << pointer << " size " << size << " success " << rv << endl;
+  memset(pointer, 0xff, size);
 #else
   void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   memset(pointer, 0x0, size);

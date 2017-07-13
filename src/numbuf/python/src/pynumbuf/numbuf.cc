@@ -6,6 +6,7 @@
 #include "bytesobject.h"
 
 #include <iostream>
+#include <chrono>
 
 #ifdef HAS_PLASMA
 // This needs to be included before plasma_protocol. We cannot include it in
@@ -34,6 +35,8 @@ PyObject* NumbufPlasmaObjectExistsError;
 #include <arrow/python/numpy_convert.h>
 
 #include "adapters/python.h"
+
+#define NUM_MEMCPY_THREADS 4
 
 using namespace arrow;
 using namespace numbuf;
@@ -178,7 +181,7 @@ static PyObject* write_to_buffer(PyObject* self, PyObject* args) {
       LENGTH_PREFIX_SIZE + reinterpret_cast<uint8_t*>(buffer->buf),
       buffer->len - LENGTH_PREFIX_SIZE);
   auto target = std::make_shared<arrow::io::FixedSizeBufferWriter>(buf);
-  target->set_memcopy_threads(1);
+  target->set_memcopy_threads(NUM_MEMCPY_THREADS);
   int64_t batch_size, total_size;
   ARROW_CHECK_OK(write_batch_and_tensors(
       target.get(), object->batch, object->arrays, &batch_size, &total_size));
@@ -309,7 +312,12 @@ static PyObject* store_list(PyObject* self, PyObject* args) {
    * stored in the plasma data buffer. The header end offset is stored in
    * the first LENGTH_PREFIX_SIZE bytes of the data buffer. The RecordBatch
    * data is stored after that. */
+  auto create_start = std::chrono::high_resolution_clock::now();
   s = client->Create(obj_id, LENGTH_PREFIX_SIZE + total_size, NULL, 0, &data);
+  auto create_end = std::chrono::high_resolution_clock::now();
+  std::cout << "numbuf_create (us): " 
+            << std::chrono::duration_cast<std::chrono::microseconds>(create_end - create_start).count()
+            << std::endl;
   if (s.IsPlasmaObjectExists()) {
     PyErr_SetString(NumbufPlasmaObjectExistsError,
         "An object with this ID already exists in the plasma "
@@ -327,14 +335,24 @@ static PyObject* store_list(PyObject* self, PyObject* args) {
   auto buf =
       std::make_shared<arrow::MutableBuffer>(LENGTH_PREFIX_SIZE + data, total_size);
   auto target = std::make_shared<arrow::io::FixedSizeBufferWriter>(buf);
-  target->set_memcopy_threads(1);
+  target->set_memcopy_threads(NUM_MEMCPY_THREADS);
+  auto memcpy_start = std::chrono::high_resolution_clock::now();
   write_batch_and_tensors(target.get(), batch, tensors, &data_size, &total_size);
+  auto memcpy_end = std::chrono::high_resolution_clock::now();
+  std::cout << "numbuf_write_batch (us): " 
+            << std::chrono::duration_cast<std::chrono::microseconds>(memcpy_end - memcpy_start).count()
+            << std::endl;
   *((int64_t*)data) = data_size;
 
   /* Do the plasma_release corresponding to the call to plasma_create. */
   ARROW_CHECK_OK(client->Release(obj_id));
   /* Seal the object. */
+  auto seal_start = std::chrono::high_resolution_clock::now();
   ARROW_CHECK_OK(client->Seal(obj_id));
+  auto seal_end = std::chrono::high_resolution_clock::now();
+  std::cout << "numbuf_seal (us): " 
+            << std::chrono::duration_cast<std::chrono::microseconds>(seal_end - seal_start).count()
+            << std::endl;
   Py_RETURN_NONE;
 }
 
