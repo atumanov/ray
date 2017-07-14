@@ -36,7 +36,7 @@ PyObject* NumbufPlasmaObjectExistsError;
 
 #include "adapters/python.h"
 
-#define NUM_MEMCPY_THREADS 4
+#define NUM_MEMCPY_THREADS 1
 
 using namespace arrow;
 using namespace numbuf;
