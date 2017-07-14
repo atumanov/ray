@@ -8,6 +8,8 @@
 
 #include <unordered_map>
 #include <iostream>
+#include <cerrno>
+#include <cstring>
 
 #include "common.h"
 
@@ -112,12 +114,15 @@ void *fake_mmap(size_t size) {
   CHECKM(fd >= 0, "Failed to create buffer during mmap");
 #ifdef __linux__
   //void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-  void *pointer = mmap(NULL, size, PROT_WRITE, MAP_SHARED | MAP_LOCKED, fd, 0);
+  void *pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (pointer == MAP_FAILED) {
-    cout << "mmap failed" << endl;
+    cout << "mmap failed with error : " << std::strerror(errno) << endl;
     return pointer;
   }
   int rv = mlock(pointer, size);
+  if (rv != 0) {
+    cout << "mlock failed with error : " << std::strerror(errno) << endl;
+  }
   cout << "mlocking pointer " << pointer << " size " << size << " success " << rv << endl;
   memset(pointer, 0xff, size);
 #else
