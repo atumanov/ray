@@ -82,22 +82,36 @@ int create_buffer(int64_t size) {
   constexpr char file_template[] = "/tmp/plasmaXXXXXX";
 #endif
   char file_name[32];
+#define MNTFILE_NAME "/mnt/hugepages/hugepagefile"
+#define DEVFILE_NAME "/dev/hugepages/hugepagefile"
+#define FILE_NAME MNTFILE_NAME
   strncpy(file_name, file_template, 32);
-  fd = mkstemp(file_name);
-  if (fd < 0)
-    return -1;
-  FILE *file = fdopen(fd, "a+");
-  if (!file) {
-    close(fd);
+  //fd = mkstemp(file_name);
+  fd = open(FILE_NAME, O_CREAT | O_RDWR, 0755);
+  if (fd < 0) {
+    printf("create_buffer failed to open file %s\n", FILE_NAME);
+    perror("create_buffer: open failed");
+    exit(1);
     return -1;
   }
-  if (unlink(file_name) != 0) {
+  FILE *file = fdopen(fd, "a+");
+  if (!file) {
+    perror("create_buffer: fdopen failed");
+    close(fd);
+    exit(1);
+    return -1;
+  }
+  if (unlink(FILE_NAME) != 0) {
+  //if (unlink(file_name) != 0) {
+    perror("create_buffer: failed to unlink file");
     LOG_ERROR("unlink error");
+    exit(1);
     return -1;
   }
   if (ftruncate(fd, (off_t) size) != 0) {
+    perror("create_buffer: ftruncate failed");
     LOG_ERROR("ftruncate error");
-    return -1;
+    //return -1;
   }
 #endif
   return fd;
