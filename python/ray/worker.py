@@ -825,7 +825,7 @@ class Worker(object):
                 self.actor_pinned_objects.append(dummy_object[0])
 
         # Push all of the log events to the global state store.
-        flush_log()
+        #flush_log()
 
         # Increase the task execution counter.
         (self.num_task_executions[task.driver_id().id()]
@@ -1719,7 +1719,7 @@ def connect(info, object_id_seed=None, mode=WORKER_MODE, worker=global_worker,
     # Create an object store client.
     worker.plasma_client = plasma.connect(info["store_socket_name"],
                                           info["manager_socket_name"],
-                                          64)
+                                          0)
     # Create the local scheduler client.
     if worker.actor_id != NIL_ACTOR_ID:
         num_gpus = int(worker.redis_client.hget(b"Actor:" + actor_id,
@@ -1972,9 +1972,9 @@ def flush_log(worker=global_worker):
     """Send the logged worker events to the global state store."""
     event_log_key = b"event_log:" + worker.worker_id
     event_log_value = json.dumps(worker.events)
-    worker.local_scheduler_client.log_event(event_log_key,
-                                            event_log_value,
-                                            time.time())
+    #worker.local_scheduler_client.log_event(event_log_key,
+    #                                        event_log_value,
+    #                                        time.time())
     worker.events = []
 
 

@@ -128,7 +128,7 @@ void kill_worker(LocalSchedulerState *state,
     /* Update the task table to reflect that the task failed to complete. */
     if (state->db != NULL) {
       Task_set_state(worker->task_in_progress, TASK_STATUS_LOST);
-      task_table_update(state->db, worker->task_in_progress, NULL, NULL, NULL);
+      //task_table_update(state->db, worker->task_in_progress, NULL, NULL, NULL);
     } else {
       Task_free(worker->task_in_progress);
     }
@@ -561,7 +561,7 @@ void assign_task_to_worker(LocalSchedulerState *state,
   worker->task_in_progress = Task_copy(task);
   /* Update the global task table. */
   if (state->db != NULL) {
-    task_table_update(state->db, task, NULL, NULL, NULL);
+    //task_table_update(state->db, task, NULL, NULL, NULL);
   } else {
     Task_free(task);
   }
@@ -590,7 +590,7 @@ void finish_task(LocalSchedulerState *state, LocalSchedulerClient *worker) {
     if (state->db != NULL) {
       /* Update control state tables. */
       Task_set_state(worker->task_in_progress, TASK_STATUS_DONE);
-      task_table_update(state->db, worker->task_in_progress, NULL, NULL, NULL);
+      //task_table_update(state->db, worker->task_in_progress, NULL, NULL, NULL);
       /* The call to task_table_update takes ownership of the
        * task_in_progress, so we set the pointer to NULL so it is not used. */
     } else {

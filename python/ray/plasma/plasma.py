@@ -47,7 +47,10 @@ def start_plasma_store(plasma_store_memory=DEFAULT_PLASMA_STORE_MEMORY,
     plasma_store_name = "/tmp/plasma_store{}".format(random_name())
     command = [plasma_store_executable,
                "-s", plasma_store_name,
-               "-m", str(plasma_store_memory)]
+               "-m", str(plasma_store_memory),
+               #"-d/var/lib/hugetlbfs/user/ubuntu/pagesize-1GB",
+               "-d/var/lib/hugetlbfs/user/ubuntu/pagesize-2MB",
+               "-h"]
     if use_valgrind:
         pid = subprocess.Popen(["valgrind",
                                 "--track-origins=yes",

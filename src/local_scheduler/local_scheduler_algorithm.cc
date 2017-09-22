@@ -447,7 +447,7 @@ void add_task_to_actor_queue(LocalSchedulerState *state,
       if (from_global_scheduler) {
         /* If the task is from the global scheduler, it's already been added to
          * the task table, so just update the entry. */
-        task_table_update(state->db, task, NULL, NULL, NULL);
+        //task_table_update(state->db, task, NULL, NULL, NULL);
       } else {
         /* Otherwise, this is the first time the task has been seen in the
          * system (unless it's a resubmission of a previous task), so add the
@@ -804,7 +804,7 @@ std::list<TaskQueueEntry>::iterator queue_task(
     if (from_global_scheduler) {
       /* If the task is from the global scheduler, it's already been added to
        * the task table, so just update the entry. */
-      task_table_update(state->db, task, NULL, NULL, NULL);
+      //task_table_update(state->db, task, NULL, NULL, NULL);
     } else {
       /* Otherwise, this is the first time the task has been seen in the system
        * (unless it's a resubmission of a previous task), so add the entry. */
