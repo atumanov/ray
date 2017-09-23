@@ -984,7 +984,7 @@ void handle_task_submitted(LocalSchedulerState *state,
    * dispatch queue and trigger task dispatch. Otherwise, pass the task along to
    * the global scheduler if there is one. */
   if (resource_constraints_satisfied(state, spec) &&
-      (algorithm_state->available_workers.size() > 0) &&
+      //(algorithm_state->available_workers.size() > 0) &&
       can_run(algorithm_state, spec)) {
     queue_dispatch_task(state, algorithm_state, spec, task_spec_size, false);
   } else {
