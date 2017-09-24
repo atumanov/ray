@@ -984,7 +984,7 @@ void handle_task_submitted(LocalSchedulerState *state,
    * dispatch queue and trigger task dispatch. Otherwise, pass the task along to
    * the global scheduler if there is one. */
   if (resource_constraints_satisfied(state, spec) &&
-      (algorithm_state->available_workers.size() > 0) &&
+      //(algorithm_state->available_workers.size() > 0) &&
       can_run(algorithm_state, spec)) {
     queue_dispatch_task(state, algorithm_state, spec, task_spec_size, false);
   } else {
@@ -993,7 +993,7 @@ void handle_task_submitted(LocalSchedulerState *state,
   }
 
   /* Try to dispatch tasks, since we may have added one to the queue. */
-  dispatch_tasks(state, algorithm_state);
+  //dispatch_tasks(state, algorithm_state);
 }
 
 void handle_actor_task_submitted(LocalSchedulerState *state,
@@ -1066,7 +1066,7 @@ void handle_task_scheduled(LocalSchedulerState *state,
   DCHECK(state->config.global_scheduler_exists);
   /* Push the task to the appropriate queue. */
   queue_task_locally(state, algorithm_state, spec, task_spec_size, true);
-  dispatch_tasks(state, algorithm_state);
+  //dispatch_tasks(state, algorithm_state);
 }
 
 void handle_actor_task_scheduled(LocalSchedulerState *state,
@@ -1121,7 +1121,7 @@ void handle_worker_available(LocalSchedulerState *state,
   algorithm_state->available_workers.push_back(worker);
 
   /* Try to dispatch tasks. */
-  dispatch_all_tasks(state, algorithm_state);
+  //dispatch_all_tasks(state, algorithm_state);
 }
 
 void handle_worker_removed(LocalSchedulerState *state,
@@ -1172,7 +1172,7 @@ void handle_actor_worker_available(LocalSchedulerState *state,
   CHECK(!entry.worker_available);
   entry.worker_available = true;
   /* Assign new tasks if possible. */
-  dispatch_all_tasks(state, algorithm_state);
+  //dispatch_all_tasks(state, algorithm_state);
 }
 
 void handle_worker_blocked(LocalSchedulerState *state,
@@ -1188,7 +1188,7 @@ void handle_worker_blocked(LocalSchedulerState *state,
   algorithm_state->blocked_workers.push_back(worker);
 
   /* Try to dispatch tasks, since we may have freed up some resources. */
-  dispatch_all_tasks(state, algorithm_state);
+  //dispatch_all_tasks(state, algorithm_state);
 }
 
 void handle_actor_worker_blocked(LocalSchedulerState *state,
@@ -1197,7 +1197,7 @@ void handle_actor_worker_blocked(LocalSchedulerState *state,
   /* The actor case doesn't use equivalents of the blocked_workers and
    * executing_workers lists. Are these necessary? */
   /* Try to dispatch tasks, since we may have freed up some resources. */
-  dispatch_all_tasks(state, algorithm_state);
+  //dispatch_all_tasks(state, algorithm_state);
 }
 
 void handle_worker_unblocked(LocalSchedulerState *state,
@@ -1249,7 +1249,7 @@ void handle_object_available(LocalSchedulerState *state,
     }
     /* Try to dispatch tasks, since we may have added some from the waiting
      * queue. */
-    dispatch_all_tasks(state, algorithm_state);
+    //dispatch_all_tasks(state, algorithm_state);
     /* Clean up the records for dependent tasks. */
     entry.dependent_tasks.clear();
   }

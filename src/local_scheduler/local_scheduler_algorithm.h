@@ -316,6 +316,16 @@ int reconstruct_object_timeout_handler(event_loop *loop,
 void print_worker_info(const char *message,
                        SchedulingAlgorithmState *algorithm_state);
 
+/**
+ * Assign as many tasks from the dispatch queue as possible.
+ *
+ * @param state The scheduler state.
+ * @param algorithm_state The scheduling algorithm state.
+ * @return Void.
+ */
+void dispatch_tasks(LocalSchedulerState *state,
+                    SchedulingAlgorithmState *algorithm_state);
+
 /** The following methods are for testing purposes only. */
 #ifdef LOCAL_SCHEDULER_TEST
 /**
