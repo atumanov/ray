@@ -825,7 +825,9 @@ class Worker(object):
                 self.actor_pinned_objects.append(dummy_object[0])
 
         # Push all of the log events to the global state store.
-        #flush_log()
+        # flush_log()
+        # Stash the log to be later flushed via flush_event_log()
+        stash_log()
 
         # Increase the task execution counter.
         (self.num_task_executions[task.driver_id().id()]
@@ -1647,6 +1649,7 @@ def connect(info, object_id_seed=None, mode=WORKER_MODE, worker=global_worker,
     # which is important because we will append to this field from multiple
     # threads.
     worker.events = []
+    worker.event_log = []
     # If running Ray in PYTHON_MODE, there is no need to create call
     # create_worker or to start the worker service.
     if mode == PYTHON_MODE:
@@ -1973,11 +1976,29 @@ def flush_log(worker=global_worker):
     """Send the logged worker events to the global state store."""
     event_log_key = b"event_log:" + worker.worker_id
     event_log_value = json.dumps(worker.events)
+    #push the event log directly to redis
+    worker.redis_client.rpush(event_log_key, event_log_value)
     #worker.local_scheduler_client.log_event(event_log_key,
     #                                        event_log_value,
     #                                        time.time())
     worker.events = []
 
+def stash_log(worker=global_worker):
+  """Save worker events ."""
+  event_log_key = b"event_log:" + worker.worker_id
+  event_log_value = json.dumps(worker.events)
+  # Stash this event log.
+  worker.event_log.append((event_log_key,event_log_value))
+  # Reset events
+  worker.events = []
+
+def flush_event_log(worker=global_worker):
+  """Send the saved  worker event log to the global state store."""
+  for k,v in worker.event_log:
+    worker.redis_client.rpush(k,v)
+    #worker.local_scheduler_client.log_event(k,v)
+  # Reset stashed event log
+  worker.event_log = []
 
 def get(object_ids, worker=global_worker):
     """Get a remote object or a list of remote objects from the object store.
