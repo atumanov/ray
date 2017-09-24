@@ -1225,7 +1225,6 @@ int heartbeat_handler(event_loop *loop, timer_id id, void *context) {
 }
 
 int scheduling_interval_handler(event_loop *loop, timer_id id, void *context) {
-  printf("inside scheduling_interval_handler\n");
   LocalSchedulerState *state = (LocalSchedulerState *) context;
   SchedulingAlgorithmState *algorithm_state = state->algorithm_state;
   // TODO(atumanov): consider dispatch_all_tasks to support batching actor tasks
