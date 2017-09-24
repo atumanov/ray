@@ -22,8 +22,8 @@ from ray.core.generated.DriverTableMessage import DriverTableMessage
 
 # These variables must be kept in sync with the C codebase.
 # common/common.h
-HEARTBEAT_TIMEOUT_MILLISECONDS = 10000
-NUM_HEARTBEATS_TIMEOUT = 10000
+HEARTBEAT_TIMEOUT_MILLISECONDS = 1000
+NUM_HEARTBEATS_TIMEOUT = 1000
 DB_CLIENT_ID_SIZE = 20
 NIL_ID = b"\xff" * DB_CLIENT_ID_SIZE
 # common/task.h
