@@ -1224,6 +1224,16 @@ int heartbeat_handler(event_loop *loop, timer_id id, void *context) {
   return HEARTBEAT_TIMEOUT_MILLISECONDS;
 }
 
+int scheduling_interval_handler(event_loop *loop, timer_id id, void *context) {
+  printf("inside scheduling_interval_handler\n");
+  LocalSchedulerState *state = (LocalSchedulerState *) context;
+  SchedulingAlgorithmState *algorithm_state = state->algorithm_state;
+  // TODO(atumanov): consider dispatch_all_tasks to support batching actor tasks
+  dispatch_tasks(state, algorithm_state);
+  return SCHEDULING_INTERVAL_MS;
+}
+
+
 void start_server(const char *node_ip_address,
                   const char *socket_name,
                   const char *redis_primary_addr,
@@ -1284,6 +1294,10 @@ void start_server(const char *node_ip_address,
    * dependencies. */
   event_loop_add_timer(loop, kLocalSchedulerReconstructionTimeoutMilliseconds,
                        reconstruct_object_timeout_handler, g_state);
+
+  /* Create a timer for periodic batch scheduling for the dispatch queue. */
+  event_loop_add_timer(loop, SCHEDULING_INTERVAL_MS,
+                       scheduling_interval_handler, g_state);
   /* Run event loop. */
   event_loop_run(loop);
 }

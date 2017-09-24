@@ -32,6 +32,7 @@ extern "C" {
  *  heartbeat intervals, the global scheduler or monitor process will report it
  *  as dead to the db_client table. */
 #define NUM_HEARTBEATS_TIMEOUT 100
+#define SCHEDULING_INTERVAL_MS  1
 
 /** Definitions for Ray logging levels. */
 #define RAY_COMMON_DEBUG 0
