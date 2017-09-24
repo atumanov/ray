@@ -827,7 +827,7 @@ class Worker(object):
         # Push all of the log events to the global state store.
         # flush_log()
         # Stash the log to be later flushed via flush_event_log()
-        stash_log()
+        #stash_log()
 
         # Increase the task execution counter.
         (self.num_task_executions[task.driver_id().id()]
