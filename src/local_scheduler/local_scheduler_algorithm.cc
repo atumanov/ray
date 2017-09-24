@@ -963,8 +963,10 @@ bool resource_constraints_satisfied(LocalSchedulerState *state,
    * or dynamic resource vector, the resource constraint is not satisfied. */
   for (int i = 0; i < ResourceIndex_MAX; i++) {
     double required_resource = TaskSpec_get_required_resource(spec, i);
-    if (required_resource > state->static_resources[i] ||
-        required_resource > state->dynamic_resources[i]) {
+    if (required_resource > state->static_resources[i]) { //||
+        //required_resource > state->dynamic_resources[i]) {
+        //&& (state->algorithm_state->dispatch_task_queue->size() >
+        //    1 * state->static_resources[ResourceIndex_CPU])))
       return false;
     }
   }
