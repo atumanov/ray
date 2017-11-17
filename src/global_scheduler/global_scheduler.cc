@@ -179,6 +179,7 @@ void signal_handler(int signal) {
 void process_task_waiting(Task *waiting_task, void *user_context) {
   GlobalSchedulerState *state = (GlobalSchedulerState *) user_context;
   LOG_DEBUG("Task waiting callback is called.");
+  LOG_INFO("Task was spilled back %d times\n", waiting_task->spillback_count);
   bool successfully_assigned =
       handle_task_waiting(state, state->policy_state, waiting_task);
   /* If the task was not successfully submitted to a local scheduler, add the

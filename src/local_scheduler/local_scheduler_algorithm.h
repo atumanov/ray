@@ -98,7 +98,7 @@ void handle_actor_creation_notification(
  */
 void handle_task_scheduled(LocalSchedulerState *state,
                            SchedulingAlgorithmState *algorithm_state,
-                           TaskSpec *spec,
+                           Task *spec,
                            int64_t task_spec_size);
 
 /**
@@ -113,7 +113,7 @@ void handle_task_scheduled(LocalSchedulerState *state,
  */
 void handle_actor_task_scheduled(LocalSchedulerState *state,
                                  SchedulingAlgorithmState *algorithm_state,
-                                 TaskSpec *spec,
+                                 Task *actor_task,
                                  int64_t task_spec_size);
 
 /**

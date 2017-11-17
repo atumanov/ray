@@ -16,12 +16,12 @@ void remove_actor(SchedulingAlgorithmState *algorithm_state, ActorID actor_id);
 
 void give_task_to_global_scheduler(LocalSchedulerState *state,
                                    SchedulingAlgorithmState *algorithm_state,
-                                   TaskSpec *spec,
+                                   Task *task,
                                    int64_t task_spec_size);
 
 void give_task_to_local_scheduler(LocalSchedulerState *state,
                                   SchedulingAlgorithmState *algorithm_state,
-                                  TaskSpec *spec,
+                                  Task *task,
                                   int64_t task_spec_size,
                                   DBClientID local_scheduler_id);
 
@@ -29,6 +29,7 @@ struct TaskQueueEntry {
   /** The task that is queued. */
   TaskSpec *spec;
   int64_t task_spec_size;
+  Task *task;
 };
 
 /** A data structure used to track which objects are available locally and
@@ -128,15 +129,26 @@ struct SchedulingAlgorithmState {
   std::unordered_map<ObjectID, ObjectEntry, UniqueIDHasher> remote_objects;
 };
 
+/* TODO(atumanov): deprecate this task queue entry constructor. */
 TaskQueueEntry TaskQueueEntry_init(TaskSpec *spec, int64_t task_spec_size) {
   TaskQueueEntry elt;
   elt.spec = TaskSpec_copy(spec, task_spec_size);
   elt.task_spec_size = task_spec_size;
+  elt.task = NULL;
+  return elt;
+}
+
+TaskQueueEntry TaskQueueEntry_init(Task *task) {
+  TaskQueueEntry elt;
+  elt.spec = TaskSpec_copy(&task->spec, task->task_spec_size);
+  elt.task_spec_size = task->task_spec_size;
+  elt.task = Task_copy(task);
   return elt;
 }
 
 void TaskQueueEntry_free(TaskQueueEntry *entry) {
   TaskSpec_free(entry->spec);
+  Task_free(entry->task);
 }
 
 SchedulingAlgorithmState *SchedulingAlgorithmState_init(void) {
@@ -763,7 +775,9 @@ void dispatch_tasks(LocalSchedulerState *state,
   /* Assign as many tasks as we can, while there are workers available. */
   for (auto it = algorithm_state->dispatch_task_queue->begin();
        it != algorithm_state->dispatch_task_queue->end();) {
-    TaskQueueEntry task = *it;
+    TaskQueueEntry task_entry = *it;
+    TaskSpec *spec = task_entry.spec;
+    int64_t spec_size = task_entry.task_spec_size;
     /* If there is a task to assign, but there are no more available workers in
      * the worker pool, then exit. Ensure that there will be an available
      * worker during a future invocation of dispatch_tasks. */
@@ -783,9 +797,9 @@ void dispatch_tasks(LocalSchedulerState *state,
 
     /* Skip to the next task if this task cannot currently be satisfied. */
     if (!check_dynamic_resources(
-            state, TaskSpec_get_required_resource(task.spec, ResourceIndex_CPU),
-            TaskSpec_get_required_resource(task.spec, ResourceIndex_GPU),
-            TaskSpec_get_required_resource(task.spec,
+            state, TaskSpec_get_required_resource(spec, ResourceIndex_CPU),
+            TaskSpec_get_required_resource(spec, ResourceIndex_GPU),
+            TaskSpec_get_required_resource(spec,
                                            ResourceIndex_CustomResource))) {
       /* This task could not be satisfied -- proceed to the next task. */
       ++it;
@@ -797,14 +811,14 @@ void dispatch_tasks(LocalSchedulerState *state,
     /* Get the last available worker in the available worker queue. */
     LocalSchedulerClient *worker = algorithm_state->available_workers.back();
     /* Tell the available worker to execute the task. */
-    assign_task_to_worker(state, task.spec, task.task_spec_size, worker);
+    assign_task_to_worker(state, spec, spec_size, worker);
     /* Remove the worker from the available queue, and add it to the executing
      * workers. */
     algorithm_state->available_workers.pop_back();
     algorithm_state->executing_workers.push_back(worker);
-    print_resource_info(state, task.spec);
+    print_resource_info(state, spec);
     /* Free the task queue entry. */
-    TaskQueueEntry_free(&task);
+    TaskQueueEntry_free(&task_entry);
     /* Dequeue the task. */
     it = algorithm_state->dispatch_task_queue->erase(it);
   } /* End for each task in the dispatch queue. */
@@ -868,8 +882,11 @@ std::list<TaskQueueEntry>::iterator queue_task(
   /* The task has been added to a local scheduler queue. Write the entry in the
    * task table to notify others that we have queued it. */
   if (state->db != NULL) {
-    Task *task = Task_alloc(task_entry->spec, task_entry->task_spec_size,
-                            TASK_STATUS_QUEUED, get_db_client_id(state->db));
+    /* Extract the task data structure from the queued Task element. */
+    Task *task = task_entry->task;
+    Task_set_state(task, TASK_STATUS_QUEUED);
+//    Task *task = Task_alloc(task_entry->spec, task_entry->task_spec_size,
+//                            TASK_STATUS_QUEUED, get_db_client_id(state->db));
     if (from_global_scheduler) {
       /* If the task is from the global scheduler, it's already been added to
        * the task table, so just update the entry. */
@@ -899,11 +916,11 @@ std::list<TaskQueueEntry>::iterator queue_task(
  */
 void queue_waiting_task(LocalSchedulerState *state,
                         SchedulingAlgorithmState *algorithm_state,
-                        TaskSpec *spec,
+                        Task *waiting_task,
                         int64_t task_spec_size,
                         bool from_global_scheduler) {
   LOG_DEBUG("Queueing task in waiting queue");
-  TaskQueueEntry task_entry = TaskQueueEntry_init(spec, task_spec_size);
+  TaskQueueEntry task_entry = TaskQueueEntry_init(waiting_task);
   auto it = queue_task(state, algorithm_state->waiting_task_queue, &task_entry,
                        from_global_scheduler);
   fetch_missing_dependencies(state, algorithm_state, it);
@@ -922,11 +939,12 @@ void queue_waiting_task(LocalSchedulerState *state,
  */
 void queue_dispatch_task(LocalSchedulerState *state,
                          SchedulingAlgorithmState *algorithm_state,
-                         TaskSpec *spec,
+                         Task *sched_task,
                          int64_t task_spec_size,
                          bool from_global_scheduler) {
   LOG_DEBUG("Queueing task in dispatch queue");
-  TaskQueueEntry task_entry = TaskQueueEntry_init(spec, task_spec_size);
+  TaskSpec *spec = Task_task_spec(sched_task);
+  TaskQueueEntry task_entry = TaskQueueEntry_init(sched_task);
   if (TaskSpec_is_actor_task(spec)) {
     queue_actor_task(state, algorithm_state, spec, task_spec_size,
                      from_global_scheduler);
@@ -950,16 +968,17 @@ void queue_dispatch_task(LocalSchedulerState *state,
  */
 void queue_task_locally(LocalSchedulerState *state,
                         SchedulingAlgorithmState *algorithm_state,
-                        TaskSpec *spec,
+                        Task *sched_task,
                         int64_t task_spec_size,
                         bool from_global_scheduler) {
+  TaskSpec *spec = Task_task_spec(sched_task);
   if (can_run(algorithm_state, spec)) {
     /* Dependencies are ready, so push the task to the dispatch queue. */
-    queue_dispatch_task(state, algorithm_state, spec, task_spec_size,
+    queue_dispatch_task(state, algorithm_state, sched_task, task_spec_size,
                         from_global_scheduler);
   } else {
     /* Dependencies are not ready, so push the task to the waiting queue. */
-    queue_waiting_task(state, algorithm_state, spec, task_spec_size,
+    queue_waiting_task(state, algorithm_state, sched_task, task_spec_size,
                        from_global_scheduler);
   }
 }
@@ -978,7 +997,7 @@ void give_task_to_local_scheduler_retry(UniqueID id,
   CHECK(state->actor_mapping.count(actor_id) == 1);
 
   give_task_to_local_scheduler(
-      state, state->algorithm_state, spec, Task_task_spec_size(task),
+      state, state->algorithm_state, task, Task_task_spec_size(task),
       state->actor_mapping[actor_id].local_scheduler_id);
 }
 
@@ -994,7 +1013,7 @@ void give_task_to_local_scheduler_retry(UniqueID id,
  */
 void give_task_to_local_scheduler(LocalSchedulerState *state,
                                   SchedulingAlgorithmState *algorithm_state,
-                                  TaskSpec *spec,
+                                  Task *task,
                                   int64_t task_spec_size,
                                   DBClientID local_scheduler_id) {
   if (DBClientID_equal(local_scheduler_id, get_db_client_id(state->db))) {
@@ -1003,8 +1022,11 @@ void give_task_to_local_scheduler(LocalSchedulerState *state,
   CHECK(state->db != NULL);
   /* Assign the task to the relevant local scheduler. */
   DCHECK(state->config.global_scheduler_exists);
-  Task *task = Task_alloc(spec, task_spec_size, TASK_STATUS_SCHEDULED,
-                          local_scheduler_id);
+  /* Set the task's state and the specified local scheduler id. */
+  Task_set_local_scheduler(task, local_scheduler_id);
+  Task_set_state(task, TASK_STATUS_SCHEDULED);
+//  Task *task = Task_alloc(spec, task_spec_size, TASK_STATUS_SCHEDULED,
+//                          local_scheduler_id);
   auto retryInfo = RetryInfo{
       .num_retries = 0,  // This value is unused.
       .timeout = 0,      // This value is unused.
@@ -1023,7 +1045,7 @@ void give_task_to_global_scheduler_retry(UniqueID id,
   TaskSpec *spec = Task_task_spec(task);
   CHECK(!TaskSpec_is_actor_task(spec));
 
-  give_task_to_global_scheduler(state, state->algorithm_state, spec,
+  give_task_to_global_scheduler(state, state->algorithm_state, task,
                                 Task_task_spec_size(task));
 }
 
@@ -1037,16 +1059,19 @@ void give_task_to_global_scheduler_retry(UniqueID id,
  */
 void give_task_to_global_scheduler(LocalSchedulerState *state,
                                    SchedulingAlgorithmState *algorithm_state,
-                                   TaskSpec *spec,
+                                   Task *task,
                                    int64_t task_spec_size) {
   if (state->db == NULL || !state->config.global_scheduler_exists) {
     /* A global scheduler is not available, so queue the task locally. */
-    queue_task_locally(state, algorithm_state, spec, task_spec_size, false);
+    queue_task_locally(state, algorithm_state, task, task_spec_size, false);
     return;
   }
   /* Pass on the task to the global scheduler. */
   DCHECK(state->config.global_scheduler_exists);
-  Task *task = Task_alloc(spec, task_spec_size, TASK_STATUS_WAITING, NIL_ID);
+  /* Set the task's state to waiting and reset its local scheduler id. */
+  Task_set_state(task, TASK_STATUS_WAITING);
+  Task_set_local_scheduler(task, NIL_ID);
+//  Task *task = Task_alloc(spec, task_spec_size, TASK_STATUS_WAITING, NIL_ID);
   DCHECK(state->db != NULL);
   auto retryInfo = RetryInfo{
       .num_retries = 0,  // This value is unused.
@@ -1077,6 +1102,8 @@ void handle_task_submitted(LocalSchedulerState *state,
   /* TODO(atumanov): if static is satisfied and local objects ready, but dynamic
    * resource is currently unavailable, then consider queueing task locally and
    * recheck dynamic next time. */
+  /* Create a new task structure for this task. */
+  Task *new_task = Task_alloc(spec, task_spec_size, 0x0, get_db_client_id(state->db));
 
   /* If this task's constraints are satisfied, dependencies are available
    * locally, and there is an available worker, then enqueue the task in the
@@ -1085,10 +1112,10 @@ void handle_task_submitted(LocalSchedulerState *state,
   if (resource_constraints_satisfied(state, spec) &&
       (algorithm_state->available_workers.size() > 0) &&
       can_run(algorithm_state, spec)) {
-    queue_dispatch_task(state, algorithm_state, spec, task_spec_size, false);
+    queue_dispatch_task(state, algorithm_state, new_task, task_spec_size, false);
   } else {
     /* Give the task to the global scheduler to schedule, if it exists. */
-    give_task_to_global_scheduler(state, algorithm_state, spec, task_spec_size);
+    give_task_to_global_scheduler(state, algorithm_state, new_task, task_spec_size);
   }
 
   /* Try to dispatch tasks, since we may have added one to the queue. */
@@ -1102,13 +1129,17 @@ void handle_actor_task_submitted(LocalSchedulerState *state,
   CHECK(TaskSpec_is_actor_task(task_spec));
   ActorID actor_id = TaskSpec_actor_id(task_spec);
 
+  /* Create a Task wrapper for this actor task. */
+  Task * actor_task = Task_alloc(task_spec, task_spec_size, 0x0,
+      get_db_client_id(state->db));
+
   if (state->actor_mapping.count(actor_id) == 0) {
     /* Add this task to a queue of tasks that have been submitted but the local
      * scheduler doesn't know which actor is responsible for them. These tasks
      * will be resubmitted (internally by the local scheduler) whenever a new
      * actor notification arrives. NOTE(swang): These tasks have not yet been
      * added to the task table. */
-    TaskQueueEntry task_entry = TaskQueueEntry_init(task_spec, task_spec_size);
+    TaskQueueEntry task_entry = TaskQueueEntry_init(actor_task);
     algorithm_state->cached_submitted_actor_tasks.push_back(task_entry);
     return;
   }
@@ -1117,7 +1148,7 @@ void handle_actor_task_submitted(LocalSchedulerState *state,
                        get_db_client_id(state->db))) {
     /* This local scheduler is responsible for the actor, so handle the task
      * locally. */
-    queue_task_locally(state, algorithm_state, task_spec, task_spec_size,
+    queue_task_locally(state, algorithm_state, actor_task, task_spec_size,
                        false);
     /* Attempt to dispatch tasks to this actor. */
     dispatch_actor_task(state, algorithm_state, actor_id);
@@ -1126,7 +1157,7 @@ void handle_actor_task_submitted(LocalSchedulerState *state,
      * scheduler that is responsible for this actor and assign the task directly
      * to that local scheduler. */
     give_task_to_local_scheduler(
-        state, algorithm_state, task_spec, task_spec_size,
+        state, algorithm_state, actor_task, task_spec_size,
         state->actor_mapping[actor_id].local_scheduler_id);
   }
 }
@@ -1155,7 +1186,7 @@ void handle_actor_creation_notification(
 
 void handle_task_scheduled(LocalSchedulerState *state,
                            SchedulingAlgorithmState *algorithm_state,
-                           TaskSpec *spec,
+                           Task *sched_task,
                            int64_t task_spec_size) {
   /* This callback handles tasks that were assigned to this local scheduler by
    * the global scheduler, so we can safely assert that there is a connection to
@@ -1163,13 +1194,13 @@ void handle_task_scheduled(LocalSchedulerState *state,
   DCHECK(state->db != NULL);
   DCHECK(state->config.global_scheduler_exists);
   /* Push the task to the appropriate queue. */
-  queue_task_locally(state, algorithm_state, spec, task_spec_size, true);
+  queue_task_locally(state, algorithm_state, sched_task, task_spec_size, true);
   dispatch_tasks(state, algorithm_state);
 }
 
 void handle_actor_task_scheduled(LocalSchedulerState *state,
                                  SchedulingAlgorithmState *algorithm_state,
-                                 TaskSpec *spec,
+                                 Task *actor_task,
                                  int64_t task_spec_size) {
   /* This callback handles tasks that were assigned to this local scheduler by
    * the global scheduler or by other workers, so we can safely assert that
@@ -1178,6 +1209,7 @@ void handle_actor_task_scheduled(LocalSchedulerState *state,
   DCHECK(state->config.global_scheduler_exists);
   /* Check that the task is meant to run on an actor that this local scheduler
    * is responsible for. */
+  TaskSpec *spec = &actor_task->spec;
   DCHECK(TaskSpec_is_actor_task(spec));
   ActorID actor_id = TaskSpec_actor_id(spec);
   if (state->actor_mapping.count(actor_id) == 1) {
@@ -1194,7 +1226,7 @@ void handle_actor_task_scheduled(LocalSchedulerState *state,
         "corresponding actor_map_entry is not present. This should be rare.");
   }
   /* Push the task to the appropriate queue. */
-  queue_task_locally(state, algorithm_state, spec, task_spec_size, true);
+  queue_task_locally(state, algorithm_state, actor_task, task_spec_size, true);
   dispatch_actor_task(state, algorithm_state, actor_id);
 }
 
