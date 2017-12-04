@@ -376,14 +376,16 @@ void TaskSpec_free(TaskSpec *spec) {
 
 Task *Task_alloc(TaskSpec *spec,
                  int64_t task_spec_size,
-                 int state,
+                 int task_state,
                  DBClientID local_scheduler_id) {
   int64_t size = sizeof(Task) - sizeof(TaskSpec) + task_spec_size;
   Task *result = (Task *) malloc(size);
   memset(result, 0, size);
-  result->state = state;
+  result->state = task_state;
   result->local_scheduler_id = local_scheduler_id;
   result->task_spec_size = task_spec_size;
+  result->spillback_count = 0;
+  result->lastt = 0;
   memcpy(&result->spec, spec, task_spec_size);
   return result;
 }
@@ -427,6 +429,26 @@ int64_t Task_task_spec_size(Task *task) {
 TaskID Task_task_id(Task *task) {
   TaskSpec *spec = Task_task_spec(task);
   return TaskSpec_task_id(spec);
+}
+
+int Task_spillback_count(const Task *task) {
+  return task->spillback_count;
+}
+
+void Task_set_spillback_count(Task *task, int count) {
+  task->spillback_count = count;
+}
+
+void Task_inc_spillback_count(Task *task) {
+  task->spillback_count++;
+}
+
+int64_t Task_last_spillback(const Task *task) {
+  return task->lastt;
+}
+
+void Task_set_last_spillback(Task *task, int64_t tstamp) {
+  task->lastt = tstamp;
 }
 
 void Task_free(Task *task) {

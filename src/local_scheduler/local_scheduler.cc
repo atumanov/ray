@@ -1194,12 +1194,12 @@ void handle_task_scheduled_callback(Task *original_task,
 
   if (ActorID_equal(TaskSpec_actor_id(spec), NIL_ACTOR_ID)) {
     /* This task does not involve an actor. Handle it normally. */
-    handle_task_scheduled(state, state->algorithm_state, spec,
+    handle_task_scheduled(state, state->algorithm_state, original_task,
                           Task_task_spec_size(original_task));
   } else {
     /* This task involves an actor. Call the scheduling algorithm's actor
      * handler. */
-    handle_actor_task_scheduled(state, state->algorithm_state, spec,
+    handle_actor_task_scheduled(state, state->algorithm_state, original_task,
                                 Task_task_spec_size(original_task));
   }
 }

@@ -19,6 +19,11 @@ class TaskBuilder;
 #define NIL_ACTOR_ID NIL_ID
 #define NIL_FUNCTION_ID NIL_ID
 
+/** Default time to live for a task before spilling it over to the global
+ *  scheduler.
+ */
+#define DEFAULT_CONFIG_TTL_MS ((int64_t)100)
+
 typedef UniqueID FunctionID;
 
 /** The task ID is a deterministic hash of the function ID that the task
@@ -430,6 +435,10 @@ struct Task {
   int64_t task_spec_size;
   /** The task specification for this task. */
   TaskSpec spec;
+  /** Last time this task was received for scheduling. */
+  int64_t lastt;
+  /** Number of times this task was spilled back by the local scheduler. */
+  int spillback_count;
 };
 
 /**
