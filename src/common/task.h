@@ -425,12 +425,12 @@ struct Task {
   DBClientID local_scheduler_id;
   /** The size of the task specification for this task. */
   int64_t task_spec_size;
-  /** The task specification for this task. */
-  TaskSpec spec;
   /** Last time this task was received for scheduling. */
   int64_t lastt;
   /** Number of times this task was spilled back by the local scheduler. */
   int spillback_count;
+  /** The task specification for this task. Must be the last field. */
+  TaskSpec spec;
 };
 
 /**
