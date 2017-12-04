@@ -980,6 +980,8 @@ void queue_dispatch_task(LocalSchedulerState *state,
     queue_actor_task(state, algorithm_state, spec, task_spec_size,
                      from_global_scheduler);
   } else {
+    printf("queue_dispatch_task: state %x spillover %d, about to queue\n",
+        sched_task->state, sched_task->spillback_count);
     queue_task(state, algorithm_state->dispatch_task_queue, &task_entry,
                from_global_scheduler);
   }
@@ -1143,6 +1145,7 @@ void handle_task_submitted(LocalSchedulerState *state,
   if (resource_constraints_satisfied(state, spec) &&
       (algorithm_state->available_workers.size() > 0) &&
       can_run(algorithm_state, spec)) {
+    printf("handle_task_submitted: state %x spillover %d\n", new_task->state, new_task->spillback_count);
     queue_dispatch_task(state, algorithm_state, new_task, task_spec_size, false);
   } else {
     /* Give the task to the global scheduler to schedule, if it exists. */
