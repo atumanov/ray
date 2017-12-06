@@ -916,16 +916,19 @@ std::list<TaskQueueEntry>::iterator queue_task(
     /* Extract the task data structure from the queued Task element. */
     Task *task = task_entry->task;
     Task_set_state(task, TASK_STATUS_QUEUED);
-//    Task *task = Task_alloc(task_entry->spec, task_entry->task_spec_size,
+    Task_set_local_scheduler(task, get_db_client_id(state->db));
+    /* Allocate the task to update the task table. */
+    Task *task_copy = Task_copy(task_entry->task);
+//    Task *task_copy = Task_alloc(task_entry->spec, task_entry->task_spec_size,
 //                            TASK_STATUS_QUEUED, get_db_client_id(state->db));
     if (from_global_scheduler) {
       /* If the task is from the global scheduler, it's already been added to
        * the task table, so just update the entry. */
-      task_table_update(state->db, task, NULL, NULL, NULL);
+      task_table_update(state->db, task_copy, NULL, NULL, NULL);
     } else {
       /* Otherwise, this is the first time the task has been seen in the system
        * (unless it's a resubmission of a previous task), so add the entry. */
-      task_table_add_task(state->db, task, NULL, NULL, NULL);
+      task_table_add_task(state->db, task_copy, NULL, NULL, NULL);
     }
   }
 
