@@ -1,6 +1,7 @@
 #ifndef GLOBAL_SCHEDULER_ALGORITHM_H
 #define GLOBAL_SCHEDULER_ALGORITHM_H
 
+#include <algorithm>
 #include <random>
 
 #include "common.h"

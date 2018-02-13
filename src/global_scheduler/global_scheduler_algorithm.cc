@@ -171,10 +171,71 @@ bool handle_task_waiting_random(GlobalSchedulerState *state,
   return true;
 }
 
+bool handle_task_waiting_powerof2(GlobalSchedulerState *state,
+                                  GlobalSchedulerPolicyState *policy_state,
+                                  Task *task) {
+  // Randomly select two feasible local scheduler candidates and pick the one
+  // with minimal cost.
+  TaskSpec *task_spec = Task_task_execution_spec(task)->Spec();
+  int64_t curtime = current_time_ms();
+
+  CHECKM(task_spec != NULL,
+         "task wait handler encounted a task with NULL spec");
+  CHECKM(task_spec != NULL,
+         "task wait handler encounted a task with NULL spec");
+  //const auto &execution_spec = task->execution_spec;
+  std::string id_string_fromlocalsched = task->local_scheduler_id.hex();
+  LOG_INFO("ct[%" PRId64 "] task from %s spillback %d", curtime,
+      id_string_fromlocalsched.c_str(), task->execution_spec->SpillbackCount());
+
+  std::vector<DBClientID> feasible_nodes;
+  feasible_nodes.reserve(state->local_schedulers.size());
+  for (const auto &kvpair: state->local_schedulers) {
+    /* Local scheduler map iterator yields <DBClientID, LocalScheduler> pairs.
+     */
+    const LocalScheduler &local_scheduler = kvpair.second;
+    if (!constraints_satisfied_hard(&local_scheduler, task_spec)) {
+      continue;
+    }
+    /* Add this local scheduler as a candidate for random selection.
+     */
+    feasible_nodes.push_back(kvpair.first);
+  }
+
+  if (feasible_nodes.empty()) {
+    std::string id_string = Task_task_id(task).hex();
+    LOG_ERROR(
+        "Infeasible task. No nodes satisfy hard constraints for task = %s",
+        id_string.c_str());
+    return false;
+  }
+  DBClientID best_local_scheduler_id = feasible_nodes[0];
+  if (feasible_nodes.size() > 1) {
+    std::shuffle(feasible_nodes.begin(), feasible_nodes.end(),
+                 policy_state->getRandomGenerator());
+    const auto kvpair1 = state->local_schedulers.find(feasible_nodes[0]);
+    const auto kvpair2 = state->local_schedulers.find(feasible_nodes[1]);
+    const LocalScheduler &local_sched1 = kvpair1->second;
+    const LocalScheduler &local_sched2 = kvpair2->second;
+    // Pick the local scheduler with less load.
+    if (calculate_cost_pending(state, &local_sched1, task_spec) >
+        calculate_cost_pending(state, &local_sched2, task_spec)) {
+      best_local_scheduler_id = kvpair2->first;
+    }
+  }
+
+  CHECKM(!best_local_scheduler_id.is_nil(),
+         "Task is feasible, but doesn't have a local scheduler assigned.");
+  /* A local scheduler ID was found, so assign the task. */
+  assign_task_to_local_scheduler(state, task, best_local_scheduler_id);
+  return true;
+}
+
 bool handle_task_waiting_cost(GlobalSchedulerState *state,
                          GlobalSchedulerPolicyState *policy_state,
                          Task *task) {
   TaskSpec *task_spec = Task_task_execution_spec(task)->Spec();
+  const auto &execution_spec = task->execution_spec;
   int64_t curtime = current_time_ms();
 
   CHECKM(task_spec != NULL,
@@ -183,12 +244,20 @@ bool handle_task_waiting_cost(GlobalSchedulerState *state,
   /* For tasks already seen by the global scheduler (spillback > 1),
    * adjust scheduled task counts for the source local scheduler.
    */
-  if (task->execution_spec->SpillbackCount() > 1) {
+  if (execution_spec->SpillbackCount() > 1) {
+    // Calculate a lower bound estimate on the task's queueing delay.
+    int64_t delay_allowed_ms = RayConfig::instance().spillback_allowed_min()
+        << (execution_spec->SpillbackCount() - 1);
     auto it = state->local_schedulers.find(task->local_scheduler_id);
     /* Task's previous local scheduler must be present and known. */
     CHECK(it != state->local_schedulers.end());
     LocalScheduler &src_local_scheduler = it->second;
-    src_local_scheduler.num_recent_tasks_sent -=1;
+    // If the task's delay is less than the time since last heartbeat, adjust
+    // the number of recent tasks sent to the source local scheduler.
+    if (delay_allowed_ms < (curtime - src_local_scheduler.last_heartbeat)) {
+      src_local_scheduler.num_recent_tasks_sent =
+          std::max(0LL, src_local_scheduler.num_recent_tasks_sent - 1);
+    }
   }
 
   bool task_feasible = false;
@@ -248,7 +317,7 @@ bool handle_task_waiting_cost(GlobalSchedulerState *state,
 bool handle_task_waiting(GlobalSchedulerState *state,
                          GlobalSchedulerPolicyState *policy_state,
                          Task *task) {
-  return handle_task_waiting_random(state, policy_state, task);
+  return handle_task_waiting_powerof2(state, policy_state, task);
 }
 
 void handle_object_available(GlobalSchedulerState *state,
