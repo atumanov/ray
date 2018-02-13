@@ -181,9 +181,24 @@ bool handle_task_waiting_powerof2(GlobalSchedulerState *state,
 
   CHECKM(task_spec != NULL,
          "task wait handler encounted a task with NULL spec");
-  CHECKM(task_spec != NULL,
-         "task wait handler encounted a task with NULL spec");
-  //const auto &execution_spec = task->execution_spec;
+  const auto &execution_spec = task->execution_spec;
+  if (execution_spec->SpillbackCount() > 1) {
+    auto it = state->local_schedulers.find(task->local_scheduler_id);
+    /* Task's previous local scheduler must be present and known. */
+    CHECK(it != state->local_schedulers.end());
+    LocalScheduler &src_local_scheduler = it->second;
+    if (src_local_scheduler.num_recent_tasks_sent > 0) {
+      // Calculate a lower bound estimate on the task's queueing delay.
+      int64_t delay_allowed_ms = RayConfig::instance().spillback_allowed_min()
+          << (execution_spec->SpillbackCount() - 1);
+      // If the task's delay is less than the time since last heartbeat, adjust
+      // the number of recent tasks sent to the source local scheduler.
+      if (delay_allowed_ms < (curtime - src_local_scheduler.last_heartbeat)) {
+        src_local_scheduler.num_recent_tasks_sent -= 1;
+      }
+    }
+  }
+
   std::string id_string_fromlocalsched = task->local_scheduler_id.hex();
   LOG_INFO("ct[%" PRId64 "] task from %s spillback %d", curtime,
       id_string_fromlocalsched.c_str(), task->execution_spec->SpillbackCount());
@@ -241,22 +256,20 @@ bool handle_task_waiting_cost(GlobalSchedulerState *state,
   CHECKM(task_spec != NULL,
          "task wait handler encounted a task with NULL spec");
 
-  /* For tasks already seen by the global scheduler (spillback > 1),
-   * adjust scheduled task counts for the source local scheduler.
-   */
   if (execution_spec->SpillbackCount() > 1) {
-    // Calculate a lower bound estimate on the task's queueing delay.
-    int64_t delay_allowed_ms = RayConfig::instance().spillback_allowed_min()
-        << (execution_spec->SpillbackCount() - 1);
     auto it = state->local_schedulers.find(task->local_scheduler_id);
     /* Task's previous local scheduler must be present and known. */
     CHECK(it != state->local_schedulers.end());
     LocalScheduler &src_local_scheduler = it->second;
-    // If the task's delay is less than the time since last heartbeat, adjust
-    // the number of recent tasks sent to the source local scheduler.
-    if (delay_allowed_ms < (curtime - src_local_scheduler.last_heartbeat)) {
-      src_local_scheduler.num_recent_tasks_sent =
-          std::max(0LL, src_local_scheduler.num_recent_tasks_sent - 1);
+    if (src_local_scheduler.num_recent_tasks_sent > 0) {
+      // Calculate a lower bound estimate on the task's queueing delay.
+      int64_t delay_allowed_ms = RayConfig::instance().spillback_allowed_min()
+          << (execution_spec->SpillbackCount() - 1);
+      // If the task's delay is less than the time since last heartbeat, adjust
+      // the number of recent tasks sent to the source local scheduler.
+      if (delay_allowed_ms < (curtime - src_local_scheduler.last_heartbeat)) {
+        src_local_scheduler.num_recent_tasks_sent -= 1;
+      }
     }
   }
 

@@ -119,7 +119,7 @@ class RayConfig {
         plasma_default_release_delay_(64),
         L3_cache_size_bytes_(100000000),
         spillback_allowed_min_(32),    // ms
-        spillback_allowed_max_(INT_MAX),  // ms
+        spillback_allowed_max_(1000000),  // ms
         spillback_period_(100) {}      // ms
 
   ~RayConfig() {}
