@@ -232,13 +232,18 @@ bool handle_task_waiting_powerof2(GlobalSchedulerState *state,
     const auto kvpair2 = state->local_schedulers.find(feasible_nodes[1]);
     const LocalScheduler &local_sched1 = kvpair1->second;
     const LocalScheduler &local_sched2 = kvpair2->second;
+    for (const auto &sched : {local_sched1, local_sched2}) {
+      LOG_INFO("ct[%" PRId64 "][%s][dt%" PRId64 "][q%d][w%d]: score %f\n",
+               curtime, sched.id.hex().c_str(), curtime - sched.last_heartbeat,
+               sched.info.task_queue_length, sched.info.available_workers,
+               calculate_cost_pending(state, &sched, task_spec));
+    }
     // Pick the local scheduler with less load.
     if (calculate_cost_pending(state, &local_sched1, task_spec) >
         calculate_cost_pending(state, &local_sched2, task_spec)) {
       best_local_scheduler_id = kvpair2->first;
     }
   }
-
   CHECKM(!best_local_scheduler_id.is_nil(),
          "Task is feasible, but doesn't have a local scheduler assigned.");
   /* A local scheduler ID was found, so assign the task. */
@@ -273,8 +278,6 @@ bool handle_task_waiting_cost(GlobalSchedulerState *state,
     }
   }
 
-  bool task_feasible = false;
-
   /* Go through all the nodes, calculate the score for each, pick max score. */
   double best_local_scheduler_score = INT32_MIN;
   CHECKM(best_local_scheduler_score < 0,
@@ -298,7 +301,6 @@ bool handle_task_waiting_cost(GlobalSchedulerState *state,
       continue;
     }
     std::string id_string = scheduler->id.hex();
-    task_feasible = true;
     /* This node satisfies the hard capacity constraint. Calculate its score. */
     double score = -1 * calculate_cost_pending(state, scheduler, task_spec);
     LOG_INFO("ct[%" PRId64 "][%s][dt%" PRId64 "][q%d][w%d]: score %f bestscore %f\n",
@@ -311,7 +313,7 @@ bool handle_task_waiting_cost(GlobalSchedulerState *state,
     }
   }
 
-  if (!task_feasible) {
+  if (best_local_scheduler_id.is_nil()) {
     std::string id_string = Task_task_id(task).hex();
     LOG_ERROR(
         "Infeasible task. No nodes satisfy hard constraints for task = %s",

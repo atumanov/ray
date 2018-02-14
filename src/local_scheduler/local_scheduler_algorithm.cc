@@ -1242,12 +1242,23 @@ void handle_task_submitted(LocalSchedulerState *state,
    * locally, and there is an available worker, then enqueue the task in the
    * dispatch queue and trigger task dispatch. Otherwise, pass the task along to
    * the global scheduler if there is one. */
+#if 0
   if (static_resource_constraints_satisfied(state, spec)) {
     queue_task_locally(state, algorithm_state, execution_spec, false);
   } else {
     /* Give the task to the global scheduler to schedule, if it exists. */
     give_task_to_global_scheduler(state, algorithm_state, execution_spec);
   }
+#else
+  if (resource_constraints_satisfied(state, spec) &&
+      (algorithm_state->available_workers.size() > 0) &&
+      can_run(algorithm_state, execution_spec)) {
+    queue_dispatch_task(state, algorithm_state, execution_spec, false);
+  } else {
+    /* Give the task to the global scheduler to schedule, if it exists. */
+    give_task_to_global_scheduler(state, algorithm_state, execution_spec);
+  }
+#endif
 
   /* Try to dispatch tasks, since we may have added one to the queue. */
   dispatch_tasks(state, algorithm_state);
