@@ -232,6 +232,10 @@ bool handle_task_waiting_powerof2(GlobalSchedulerState *state,
     const auto kvpair2 = state->local_schedulers.find(feasible_nodes[1]);
     const LocalScheduler &local_sched1 = kvpair1->second;
     const LocalScheduler &local_sched2 = kvpair2->second;
+    const double score_local_sched1 =
+        calculate_cost_pending(state, &local_sched1, task_spec);
+    const double score_local_sched2 =
+        calculate_cost_pending(state, &local_sched2, task_spec);
     for (const auto &sched : {local_sched1, local_sched2}) {
       LOG_INFO("ct[%" PRId64 "][%s][dt%" PRId64 "][q%d][w%d]: score %f\n",
                curtime, sched.id.hex().c_str(), curtime - sched.last_heartbeat,
@@ -239,9 +243,11 @@ bool handle_task_waiting_powerof2(GlobalSchedulerState *state,
                calculate_cost_pending(state, &sched, task_spec));
     }
     // Pick the local scheduler with less load.
-    if (calculate_cost_pending(state, &local_sched1, task_spec) >
-        calculate_cost_pending(state, &local_sched2, task_spec)) {
-      best_local_scheduler_id = kvpair2->first;
+    if (score_local_sched1 == score_local_sched2) {
+      // Flip a coin if load is equal.
+      best_local_scheduler_id = feasible_nodes[static_cast<int>(drand48()*2)];
+    } else if (score_local_sched1 > score_local_sched2) {
+      best_local_scheduler_id = feasible_nodes[1];
     }
   }
   CHECKM(!best_local_scheduler_id.is_nil(),
