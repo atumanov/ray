@@ -126,6 +126,10 @@ void assign_task_to_local_scheduler(GlobalSchedulerState *state,
     local_scheduler.info.dynamic_resources[resource_name] =
         MAX(0, local_scheduler.info.dynamic_resources[resource_name] -
                    resource_quantity);
+    // TODO(atumanov): leave reported dynamic resources immutable.
+    local_scheduler.expected_capacity[resource_name] =
+        MAX(0, local_scheduler.expected_capacity[resource_name] -
+                   resource_quantity);
   }
 }
 

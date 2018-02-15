@@ -235,10 +235,10 @@ bool handle_task_waiting_capacity(GlobalSchedulerState *state,
           CHECKM(src_local_scheduler.expected_capacity.count(resource_name) > 0,
                  "Received spillback task from local scheduler, which doesn't "
                  "match task's resource requirements.");
-          src_local_scheduler.expected_capacity[resource_name] -= resource_quantity;
-          if (src_local_scheduler.expected_capacity[resource_name] < 0) {
-            src_local_scheduler.expected_capacity[resource_name] = 0;
-          }
+          // Credit back the task's resources.
+          src_local_scheduler.expected_capacity[resource_name] = MIN(
+              src_local_scheduler.info.static_resources[resource_name],
+              src_local_scheduler.expected_capacity[resource_name] + resource_quantity);
         }
       }
     }
