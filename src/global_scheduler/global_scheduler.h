@@ -30,6 +30,10 @@ typedef struct {
    *  scheduler.
    */
   int64_t last_heartbeat;
+  /** The resource vector of resources expected to currently be available
+   * to this local scheduler.
+   */
+  std::unordered_map<std::string, double> expected_capacity;
   /** The latest information about the local scheduler capacity. This is updated
    *  every time a new local scheduler heartbeat arrives. */
   LocalSchedulerInfo info;

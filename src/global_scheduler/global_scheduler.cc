@@ -370,6 +370,8 @@ void local_scheduler_table_handler(DBClientID client_id,
       local_scheduler.num_heartbeats_missed = 0;
       local_scheduler.num_recent_tasks_sent = 0;
       local_scheduler.last_heartbeat = curtime;
+      /* Overwrite expected capacity with reported dynamic resource capacity. */
+      local_scheduler.expected_capacity = info.dynamic_resources;
       local_scheduler.info = info;
     }
   } else {
