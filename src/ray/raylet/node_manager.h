@@ -84,6 +84,9 @@ class NodeManager {
   ray::Status ForwardTask(const Task &task, const ClientID &node_id);
   /// Send heartbeats to the GCS.
   void Heartbeat();
+  /// Dispatch locally scheduled tasks. This attempts the transition from "scheduled" to
+  /// "running" task state.
+  void DispatchTasks();
 
   boost::asio::io_service &io_service_;
   boost::asio::deadline_timer heartbeat_timer_;
