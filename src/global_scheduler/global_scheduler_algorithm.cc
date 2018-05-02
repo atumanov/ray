@@ -4,6 +4,7 @@
 #include "state/task_table.h"
 
 #include "global_scheduler_algorithm.h"
+#include "global_scheduler.h"
 
 GlobalSchedulerPolicyState *GlobalSchedulerPolicyState_init(void) {
   GlobalSchedulerPolicyState *policy_state = new GlobalSchedulerPolicyState();
@@ -96,9 +97,9 @@ int64_t locally_available_data_size(const GlobalSchedulerState *state,
       int64_t object_size = object_size_info.data_size;
       if (object_size == -1) {
         /* This means that this global scheduler does not know the object size
-         * yet, so assume that the object is one megabyte. TODO(rkn): Maybe we
-         * should instead use the average object size. */
-        object_size = 1000000;
+         * yet, so assume that the object is one megabyte.
+         * TODO(rkn): Maybe we should instead use the average object size. */
+        object_size = 1024;
       }
 
       /* If we get here, then this local scheduler has access to this object, so
@@ -123,6 +124,7 @@ double calculate_cost_pending(const GlobalSchedulerState *state,
                         scheduler->info.available_workers;
   return cost_pending;
 }
+
 
 bool handle_task_waiting_random(GlobalSchedulerState *state,
                                 GlobalSchedulerPolicyState *policy_state,
@@ -159,6 +161,49 @@ bool handle_task_waiting_random(GlobalSchedulerState *state,
   // A local scheduler ID was found, so assign the task.
   assign_task_to_local_scheduler(state, task, local_scheduler_id);
   return true;
+}
+
+
+bool handle_task_waiting_locality(GlobalSchedulerState *state,
+                                  GlobalSchedulerPolicyState *policy_state,
+                                  Task *task) {
+  // Go through local schedulers, figure out which one has the most local data.
+  // Send task there. Check constraints. If none of the nodes have more than 1MB of
+  // locally available data, invoke the random placement handler.
+  TaskSpec *task_spec = Task_task_execution_spec(task)->Spec();
+
+  int64_t max_local_bytes = 0;
+  DBClientID best_localsched_id = DBClientID::nil();
+  for (const auto &it : state->local_schedulers) {
+    const LocalScheduler &local_scheduler = it.second;
+    // If node capacity constraints are not satisfied skip this node.
+    if (!constraints_satisfied_hard(&local_scheduler, task_spec)) {
+      continue;
+    }
+    // Check how much of the task's data is local to this node.
+    int64_t local_bytes = locally_available_data_size(state, local_scheduler.id, task_spec);
+    if (local_bytes > max_local_bytes) {
+      max_local_bytes = local_bytes;
+      best_localsched_id = local_scheduler.id;
+    }
+  }
+
+  // We've iterated over all available local schedulers. If we have a candidate, it means
+  // that it has some local data available for this task. Send task there if data_size
+  // exceeds 1MB. In all other cases, invoke the random placement handler.
+  if (!best_localsched_id.is_nil()) {
+    RAY_LOG(INFO) << "Local scheduler found with local data with id = " << best_localsched_id
+                  << " for task = " << Task_task_id(task);
+    if (max_local_bytes >= 1000000) {
+      RAY_LOG(INFO) << "Big object task will be sent to node id = " << best_localsched_id;
+      // A local scheduler ID was found, so assign the task.
+      assign_task_to_local_scheduler(state, task, best_localsched_id);
+      return true;
+    }
+  }
+
+  // Invoke the random policy.
+  return handle_task_waiting_random(state, policy_state, task);
 }
 
 bool handle_task_waiting_cost(GlobalSchedulerState *state,
@@ -235,7 +280,8 @@ bool handle_task_waiting_cost(GlobalSchedulerState *state,
 bool handle_task_waiting(GlobalSchedulerState *state,
                          GlobalSchedulerPolicyState *policy_state,
                          Task *task) {
-  return handle_task_waiting_random(state, policy_state, task);
+  //return handle_task_waiting_random(state, policy_state, task);
+  return handle_task_waiting_locality(state, policy_state, task);
 }
 
 void handle_object_available(GlobalSchedulerState *state,
