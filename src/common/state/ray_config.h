@@ -100,7 +100,7 @@ class RayConfig {
     return object_manager_default_chunk_size_;
   }
 
-  uint64_t global_scheduler_data_threshold() const {
+  int64_t global_scheduler_data_threshold() const {
     return global_scheduler_data_threshold_;
   }
 
@@ -240,7 +240,7 @@ class RayConfig {
 
   /// Default threshold for object size for which the global scheduler locality policy
   /// will place tasks in a locality-aware manner.
-  uint64_t global_scheduler_data_threshold_;
+  int64_t global_scheduler_data_threshold_;
 };
 
 #endif  // RAY_CONFIG_H
