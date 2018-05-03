@@ -194,7 +194,7 @@ bool handle_task_waiting_locality(GlobalSchedulerState *state,
   if (!best_localsched_id.is_nil()) {
     RAY_LOG(INFO) << "Local scheduler found with local data with id = " << best_localsched_id
                   << " for task = " << Task_task_id(task);
-    if (max_local_bytes >= 1000000) {
+    if (max_local_bytes >= RayConfig::instance().global_scheduler_data_threshold()) {
       RAY_LOG(INFO) << "Big object task will be sent to node id = " << best_localsched_id;
       // A local scheduler ID was found, so assign the task.
       assign_task_to_local_scheduler(state, task, best_localsched_id);

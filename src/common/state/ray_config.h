@@ -100,6 +100,10 @@ class RayConfig {
     return object_manager_default_chunk_size_;
   }
 
+  uint64_t global_scheduler_data_threshold() const {
+    return global_scheduler_data_threshold_;
+  }
+
  private:
   RayConfig()
       : ray_protocol_version_(0x0000000000000000),
@@ -134,7 +138,8 @@ class RayConfig {
         object_manager_pull_timeout_ms_(20),
         object_manager_max_sends_(2),
         object_manager_max_receives_(2),
-        object_manager_default_chunk_size_(100000000) {}
+        object_manager_default_chunk_size_(100000000),
+        global_scheduler_data_threshold_(10000) {}
 
   ~RayConfig() {}
 
@@ -232,6 +237,10 @@ class RayConfig {
   /// In the object manager, no single thread is permitted to transfer more
   /// data than what is specified by the chunk size.
   uint64_t object_manager_default_chunk_size_;
+
+  /// Default threshold for object size for which the global scheduler locality policy
+  /// will place tasks in a locality-aware manner.
+  uint64_t global_scheduler_data_threshold_;
 };
 
 #endif  // RAY_CONFIG_H
