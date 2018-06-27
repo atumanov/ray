@@ -22,6 +22,40 @@ const std::list<Task> &SchedulingQueue::GetReadyTasks() const {
   return this->ready_tasks_;
 }
 
+ResourceSet&& SchedulingQueue::GetReadyTaskResources() const {
+  // Iterate over all ready tasks and aggregate total resource demand.
+  ResourceSet ready_task_resources;
+  for (const auto &t : ready_tasks_) {
+    ready_task_resources.OuterJoin(t.GetTaskSpecification().GetRequiredResources());
+  }
+  return std::move(ready_task_resources);
+}
+
+ResourceSet&& SchedulingQueue::GetScheduledTaskResources() const {
+  ResourceSet scheduled_task_resources;
+  for (const auto &t : scheduled_tasks_) {
+    scheduled_task_resources.OuterJoin(t.GetTaskSpecification().GetRequiredResources());
+  }
+  return std::move(scheduled_task_resources);
+}
+
+ResourceSet&& SchedulingQueue::GetRunningTaskResources() const {
+  ResourceSet running_task_resources;
+  for (const auto &t : running_tasks_) {
+    running_task_resources.OuterJoin(t.GetTaskSpecification().GetRequiredResources());
+  }
+  return std::move(running_task_resources);
+}
+
+ResourceSet&& SchedulingQueue::GetLoadTaskResources() const {
+  ResourceSet load_resource_set;
+  load_resource_set.OuterJoin(GetScheduledTaskResources());
+  load_resource_set.OuterJoin(GetReadyTaskResources());
+  // TODO(atumanov): we may or may not want to include running tasks into load.
+  load_resource_set.AddResources(GetRunningTaskResources());
+  return std::move(load_resource_set);
+}
+
 const std::list<Task> &SchedulingQueue::GetRunningTasks() const {
   return this->running_tasks_;
 }

@@ -79,7 +79,7 @@ class NodeManager {
   /// Handle a worker finishing its assigned task.
   void FinishAssignedTask(Worker &worker);
   /// Perform a placement decision on placeable tasks.
-  void ScheduleTasks();
+  void ScheduleTasks(std::unordered_map<ClientID, SchedulingResources> &resource_map);
   /// Resubmit a task whose return value needs to be reconstructed.
   void ResubmitTask(const TaskID &task_id);
   /// Forward a task to another node to execute. The task is assumed to not be

@@ -164,7 +164,7 @@ void NodeManager::Heartbeat() {
   auto &heartbeat_table = gcs_client_->heartbeat_table();
   auto heartbeat_data = std::make_shared<HeartbeatTableDataT>();
   auto client_id = gcs_client_->client_table().GetLocalClientId();
-  const SchedulingResources &local_resources = cluster_resource_map_[client_id];
+  SchedulingResources &local_resources = cluster_resource_map_[client_id];
   heartbeat_data->client_id = client_id.hex();
   // TODO(atumanov): modify the heartbeat table protocol to use the ResourceSet directly.
   // TODO(atumanov): implement a ResourceSet const_iterator.
@@ -177,6 +177,14 @@ void NodeManager::Heartbeat() {
     heartbeat_data->resources_total_label.push_back(resource_pair.first);
     heartbeat_data->resources_total_capacity.push_back(resource_pair.second);
   }
+  // TODO(atumanov): extract resource load information from the SchedulingQueues class.
+  local_resources.SetLoadResources(this->local_queues_.GetLoadTaskResources());
+  for (const auto &resource_pair : local_resources.GetLoadResources().GetResourceMap()) {
+    heartbeat_data->resource_load_label.push_back(resource_pair.first);
+    heartbeat_data->resource_load_capacity.push_back(resource_pair.second);
+  }
+  RAY_LOG(DEBUG) << "[Heartbeat]"
+                << " load " << local_resources.GetLoadResources().ToString();
 
   ray::Status status = heartbeat_table.Add(
       UniqueID::nil(), gcs_client_->client_table().GetLocalClientId(), heartbeat_data,
@@ -239,10 +247,12 @@ void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
   remote_server_connections_.emplace(client_id, std::move(server_conn));
 }
 
+// Heartbeat handler.
 void NodeManager::HeartbeatAdded(gcs::AsyncGcsClient *client, const ClientID &client_id,
                                  const HeartbeatTableDataT &heartbeat_data) {
   RAY_LOG(DEBUG) << "[HeartbeatAdded]: received heartbeat from client id " << client_id;
-  if (client_id == gcs_client_->client_table().GetLocalClientId()) {
+  const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
+  if (client_id == local_client_id) {
     // Skip heartbeats from self.
     return;
   }
@@ -258,11 +268,29 @@ void NodeManager::HeartbeatAdded(gcs::AsyncGcsClient *client, const ClientID &cl
   SchedulingResources &resources = it->second;
   ResourceSet heartbeat_resource_available(heartbeat_data.resources_available_label,
                                            heartbeat_data.resources_available_capacity);
+  ResourceSet heartbeat_resource_load(heartbeat_data.resource_load_label,
+                                      heartbeat_data.resource_load_capacity);
+  RAY_LOG(INFO) << "[HeartbeatAdded]: received load: "
+                << heartbeat_resource_load.ToString();
   resources.SetAvailableResources(
       ResourceSet(heartbeat_data.resources_available_label,
                   heartbeat_data.resources_available_capacity));
-  RAY_CHECK(this->cluster_resource_map_[client_id].GetAvailableResources() ==
-            heartbeat_resource_available);
+  // Extract the load information and save it locally.
+  resources.SetLoadResources(
+      ResourceSet(heartbeat_data.resource_load_label,
+                  heartbeat_data.resource_load_capacity));
+  RAY_CHECK(
+      cluster_resource_map_[client_id].GetAvailableResources() == heartbeat_resource_available);
+  RAY_CHECK(
+      cluster_resource_map_[client_id].GetLoadResources() == heartbeat_resource_load);
+
+  // Construct cluster resources for the heartbeating client_id & call scheduling policy.
+
+  if (cluster_resource_map_.find(client_id) != cluster_resource_map_.end()) {
+    std::unordered_map<ClientID, SchedulingResources> node_resources;
+    node_resources.emplace(client_id, cluster_resource_map_[client_id]);
+    ScheduleTasks(node_resources);
+  }
 }
 
 void NodeManager::HandleActorCreation(const ActorID &actor_id,
@@ -590,15 +618,19 @@ void NodeManager::ProcessNodeManagerMessage(TcpClientConnection &node_manager_cl
   node_manager_client.ProcessMessages();
 }
 
-void NodeManager::ScheduleTasks() {
-  auto policy_decision = scheduling_policy_.Schedule(
-      cluster_resource_map_, gcs_client_->client_table().GetLocalClientId(),
-      remote_clients_);
+// Make a placement decision for placeable tasks given the resource_map provided.
+// Perform task state transition and task forwarding based on the placement decision.
+void NodeManager::ScheduleTasks(std::unordered_map<ClientID, SchedulingResources> &resource_map) {
+  // This method performs the transition of tasks from PENDING to SCHEDULED.
+  const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
+  auto policy_decision = scheduling_policy_.Schedule(resource_map, local_client_id);
+  // TODO(atumanov): wrap debug log code in a DEBUG pragma
+
 #ifndef NDEBUG
   RAY_LOG(DEBUG) << "[NM ScheduleTasks] policy decision:";
-  for (const auto &pair : policy_decision) {
-    TaskID task_id = pair.first;
-    ClientID client_id = pair.second;
+  for (const auto &task_client_pair : policy_decision)  {
+    TaskID task_id = task_client_pair.first;
+    ClientID client_id = task_client_pair.second;
     RAY_LOG(DEBUG) << task_id << " --> " << client_id;
   }
 #endif
@@ -606,10 +638,10 @@ void NodeManager::ScheduleTasks() {
   // Extract decision for this local scheduler.
   std::unordered_set<TaskID> local_task_ids;
   // Iterate over (taskid, clientid) pairs, extract tasks assigned to the local node.
-  for (const auto &task_schedule : policy_decision) {
-    TaskID task_id = task_schedule.first;
-    ClientID client_id = task_schedule.second;
-    if (client_id == gcs_client_->client_table().GetLocalClientId()) {
+  for (const auto &task_client_pair : policy_decision) {
+    TaskID task_id = task_client_pair.first;
+    ClientID client_id = task_client_pair.second;
+    if (client_id == local_client_id) {
       local_task_ids.insert(task_id);
     } else {
       // TODO(atumanov): need a better interface for task exit on forward.
