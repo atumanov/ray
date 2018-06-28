@@ -31,9 +31,9 @@ ResourceSet&& SchedulingQueue::GetReadyTaskResources() const {
   return std::move(ready_task_resources);
 }
 
-ResourceSet&& SchedulingQueue::GetScheduledTaskResources() const {
+ResourceSet&& SchedulingQueue::GetPlaceableTaskResources() const {
   ResourceSet scheduled_task_resources;
-  for (const auto &t : scheduled_tasks_) {
+  for (const auto &t : placeable_tasks_) {
     scheduled_task_resources.OuterJoin(t.GetTaskSpecification().GetRequiredResources());
   }
   return std::move(scheduled_task_resources);
@@ -49,7 +49,7 @@ ResourceSet&& SchedulingQueue::GetRunningTaskResources() const {
 
 ResourceSet&& SchedulingQueue::GetLoadTaskResources() const {
   ResourceSet load_resource_set;
-  load_resource_set.OuterJoin(GetScheduledTaskResources());
+  load_resource_set.OuterJoin(GetPlaceableTaskResources());
   load_resource_set.OuterJoin(GetReadyTaskResources());
   // TODO(atumanov): we may or may not want to include running tasks into load.
   load_resource_set.AddResources(GetRunningTaskResources());

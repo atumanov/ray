@@ -620,7 +620,8 @@ void NodeManager::ProcessNodeManagerMessage(TcpClientConnection &node_manager_cl
 
 // Make a placement decision for placeable tasks given the resource_map provided.
 // Perform task state transition and task forwarding based on the placement decision.
-void NodeManager::ScheduleTasks(std::unordered_map<ClientID, SchedulingResources> &resource_map) {
+void NodeManager::ScheduleTasks(
+    std::unordered_map<ClientID, SchedulingResources> &resource_map) {
   // This method performs the transition of tasks from PENDING to SCHEDULED.
   const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
   auto policy_decision = scheduling_policy_.Schedule(resource_map, local_client_id);
@@ -718,7 +719,7 @@ void NodeManager::SubmitTask(const Task &task, const Lineage &uncommitted_lineag
       EnqueuePlaceableTask(task);
     } else {
       local_queues_.QueuePlaceableTasks({task});
-      ScheduleTasks();
+      ScheduleTasks(cluster_resource_map_);
     }
   }
 }

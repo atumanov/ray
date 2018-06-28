@@ -48,22 +48,10 @@ class SchedulingQueue {
   /// dependencies local and that are waiting to be scheduled.
   const std::list<Task> &GetPlaceableTasks() const;
 
-  ResourceSet&& GetReadyTaskResources() const;
-
-  ResourceSet&& GetScheduledTaskResources() const;
-
-  ResourceSet&& GetRunningTaskResources() const;
-
   /// \brief Return an aggregate resource set for all tests exerting load on this system.
   ///
   /// \return A resource set with aggregate information about resource load on this system.
   ResourceSet&& GetLoadTaskResources() const;
-
-  /// Get the queue of actor methods in the ready state.
-  ///
-  /// \return A const reference to the queue of actor methods that have all
-  /// dependencies local and that are waiting to be scheduled.
-  const std::list<Task> &GetReadyMethods() const;
 
   /// Get the queue of tasks in the ready state.
   ///
@@ -148,6 +136,12 @@ class SchedulingQueue {
   /// Tasks that were dispatched to a worker but are blocked on a data
   /// dependency that was missing at runtime.
   std::list<Task> blocked_tasks_;
+
+  ResourceSet&& GetReadyTaskResources() const;
+
+  ResourceSet&& GetPlaceableTaskResources() const;
+
+  ResourceSet&& GetRunningTaskResources() const;
 };
 
 }  // namespace raylet
