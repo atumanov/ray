@@ -163,11 +163,13 @@ void NodeManager::Heartbeat() {
   RAY_LOG(DEBUG) << "[Heartbeat] sending heartbeat.";
   auto &heartbeat_table = gcs_client_->heartbeat_table();
   auto heartbeat_data = std::make_shared<HeartbeatTableDataT>();
-  auto client_id = gcs_client_->client_table().GetLocalClientId();
-  SchedulingResources &local_resources = cluster_resource_map_[client_id];
-  heartbeat_data->client_id = client_id.hex();
+  const auto &my_client_id = gcs_client_->client_table().GetLocalClientId();
+  SchedulingResources &local_resources = cluster_resource_map_[my_client_id];
+  heartbeat_data->client_id = my_client_id.hex();
   // TODO(atumanov): modify the heartbeat table protocol to use the ResourceSet directly.
   // TODO(atumanov): implement a ResourceSet const_iterator.
+  RAY_LOG(INFO) << "[Heartbeat] resources available: "
+                << local_resources.GetAvailableResources().ToString();
   for (const auto &resource_pair :
        local_resources.GetAvailableResources().GetResourceMap()) {
     heartbeat_data->resources_available_label.push_back(resource_pair.first);
@@ -266,12 +268,14 @@ void NodeManager::HeartbeatAdded(gcs::AsyncGcsClient *client, const ClientID &cl
     return;
   }
   SchedulingResources &remote_resources = it->second;
-  ResourceSet heartbeat_resource_available(heartbeat_data.resources_available_label,
-                                           heartbeat_data.resources_available_capacity);
-  ResourceSet heartbeat_resource_load(heartbeat_data.resource_load_label,
+
+  ResourceSet remote_available(heartbeat_data.resources_available_label,
+                               heartbeat_data.resources_available_capacity);
+  ResourceSet remote_load(heartbeat_data.resource_load_label,
                                       heartbeat_data.resource_load_capacity);
-  RAY_LOG(INFO) << "[HeartbeatAdded]: received load: "
-                << heartbeat_resource_load.ToString();
+  // TODO(atumanov): assert that the load is a non-empty ResourceSet.
+  RAY_LOG(DEBUG) << "[HeartbeatAdded]: received load: "
+                << remote_load.ToString();
   remote_resources.SetAvailableResources(
       ResourceSet(heartbeat_data.resources_available_label,
                   heartbeat_data.resources_available_capacity));
@@ -280,20 +284,28 @@ void NodeManager::HeartbeatAdded(gcs::AsyncGcsClient *client, const ClientID &cl
       ResourceSet(heartbeat_data.resource_load_label,
                   heartbeat_data.resource_load_capacity));
   RAY_CHECK(
-      cluster_resource_map_[client_id].GetAvailableResources() == heartbeat_resource_available);
+      cluster_resource_map_[client_id].GetAvailableResources() == remote_available);
   RAY_CHECK(
-      cluster_resource_map_[client_id].GetLoadResources() == heartbeat_resource_load);
+      cluster_resource_map_[client_id].GetLoadResources() == remote_load);
+
 
   // Construct cluster resources for the heartbeating client_id & call scheduling policy.
-    std::unordered_map<ClientID, SchedulingResources>
-        node_resources({{client_id, remote_resources}});
-    ScheduleTasks(node_resources);
-  // Check if the available resources have been updated in the cluster resource map.
-  RAY_CHECK(remote_resources.GetAvailableResources().IsEqual(
-            node_resources[client_id].GetAvailableResources()));
-  RAY_LOG(INFO) << "[HeartbeatAdded]: remote resources available: "
-                << node_resources[client_id].GetAvailableResources().ToString()
+  std::unordered_map<ClientID, SchedulingResources>
+      remote_resource_map({{client_id, remote_resources}});
+  RAY_LOG(DEBUG) << "[HeartbeatAdded]: remote resources available before: "
+                << remote_resource_map[client_id].GetAvailableResources().ToString()
                 << cluster_resource_map_[client_id].GetAvailableResources().ToString();
+    ScheduleTasks(remote_resource_map);
+  // Update locally maintained copy of remote resource availability after the placement
+  // decision.
+  ResourceSet updated_available_resources = remote_resource_map[client_id].GetAvailableResources();
+  remote_resources.SetAvailableResources(std::move(updated_available_resources));
+  // Assert that the available resources have been updated in the cluster resource map.
+  RAY_LOG(DEBUG) << "[HeartbeatAdded]: remote resources available after: "
+                << remote_resource_map[client_id].GetAvailableResources().ToString()
+                << cluster_resource_map_[client_id].GetAvailableResources().ToString();
+  RAY_CHECK(remote_resources.GetAvailableResources().IsEqual(
+            remote_resource_map[client_id].GetAvailableResources()));
 }
 
 void NodeManager::HandleActorCreation(const ActorID &actor_id,
