@@ -10,7 +10,7 @@ SchedulingPolicy::SchedulingPolicy(const SchedulingQueue &scheduling_queue)
     : scheduling_queue_(scheduling_queue), gen_(rd_()) {}
 
 std::unordered_map<TaskID, ClientID> SchedulingPolicy::Schedule(
-    const std::unordered_map<ClientID, SchedulingResources> &cluster_resources,
+    std::unordered_map<ClientID, SchedulingResources> &cluster_resources,
     const ClientID &local_client_id) {
   // The policy decision to be returned.
   std::unordered_map<TaskID, ClientID> decision;
@@ -49,7 +49,7 @@ std::unordered_map<TaskID, ClientID> SchedulingPolicy::Schedule(
       const auto &node_resources = client_resource_pair.second;
       RAY_LOG(DEBUG) << "client_id " << node_client_id << " resources: "
                      << node_resources.GetAvailableResources().ToString();
-      if (resource_demand.IsSubset(node_resources.GetTotalResources())) {
+      if (resource_demand.IsSubset(node_resources.GetAvailableResources())) {
         // This node is a feasible candidate.
         client_keys.push_back(node_client_id);
       }
@@ -61,12 +61,17 @@ std::unordered_map<TaskID, ClientID> SchedulingPolicy::Schedule(
       // TODO(atumanov): change uniform random to discrete, weighted by resource capacity.
       std::uniform_int_distribution<int> distribution(0, client_keys.size() - 1);
       int client_key_index = distribution(gen_);
-      decision[task_id] = client_keys[client_key_index];
+      const ClientID &dst_client_id = client_keys[client_key_index];
+      // Decrement destination client's available resources at placement decision time.
+      cluster_resources[dst_client_id].Acquire(
+          t.GetTaskSpecification().GetRequiredResources());
+      // Fractional and enumerated resources will be acquired on task dispatch.
+      decision[task_id] = dst_client_id;
       RAY_LOG(DEBUG) << "[SchedulingPolicy] idx=" << client_key_index << " " << task_id
                      << " --> " << client_keys[client_key_index];
     } else {
-      // There are no nodes that can feasibily execute this task. TODO(rkn): Propagate a
-      // warning to the user.
+      // There are no nodes that can feasibly execute this task. The task remains
+      // placeable. TODO(rkn): Propagate a warning to the user.
       RAY_LOG(WARNING) << "This task requires "
                        << t.GetTaskSpecification().GetRequiredResources().ToString()
                        << ", but no nodes have the necessary resources.";

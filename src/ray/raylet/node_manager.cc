@@ -265,18 +265,18 @@ void NodeManager::HeartbeatAdded(gcs::AsyncGcsClient *client, const ClientID &cl
                   << client_id;
     return;
   }
-  SchedulingResources &resources = it->second;
+  SchedulingResources &remote_resources = it->second;
   ResourceSet heartbeat_resource_available(heartbeat_data.resources_available_label,
                                            heartbeat_data.resources_available_capacity);
   ResourceSet heartbeat_resource_load(heartbeat_data.resource_load_label,
                                       heartbeat_data.resource_load_capacity);
   RAY_LOG(INFO) << "[HeartbeatAdded]: received load: "
                 << heartbeat_resource_load.ToString();
-  resources.SetAvailableResources(
+  remote_resources.SetAvailableResources(
       ResourceSet(heartbeat_data.resources_available_label,
                   heartbeat_data.resources_available_capacity));
   // Extract the load information and save it locally.
-  resources.SetLoadResources(
+  remote_resources.SetLoadResources(
       ResourceSet(heartbeat_data.resource_load_label,
                   heartbeat_data.resource_load_capacity));
   RAY_CHECK(
@@ -285,12 +285,15 @@ void NodeManager::HeartbeatAdded(gcs::AsyncGcsClient *client, const ClientID &cl
       cluster_resource_map_[client_id].GetLoadResources() == heartbeat_resource_load);
 
   // Construct cluster resources for the heartbeating client_id & call scheduling policy.
-
-  if (cluster_resource_map_.find(client_id) != cluster_resource_map_.end()) {
-    std::unordered_map<ClientID, SchedulingResources> node_resources;
-    node_resources.emplace(client_id, cluster_resource_map_[client_id]);
+    std::unordered_map<ClientID, SchedulingResources>
+        node_resources({{client_id, remote_resources}});
     ScheduleTasks(node_resources);
-  }
+  // Check if the available resources have been updated in the cluster resource map.
+  RAY_CHECK(remote_resources.GetAvailableResources().IsEqual(
+            node_resources[client_id].GetAvailableResources()));
+  RAY_LOG(INFO) << "[HeartbeatAdded]: remote resources available: "
+                << node_resources[client_id].GetAvailableResources().ToString()
+                << cluster_resource_map_[client_id].GetAvailableResources().ToString();
 }
 
 void NodeManager::HandleActorCreation(const ActorID &actor_id,
@@ -783,13 +786,11 @@ void NodeManager::AssignTask(Task &task) {
   RAY_LOG(DEBUG) << "Assigning task to worker with pid " << worker->Pid();
   flatbuffers::FlatBufferBuilder fbb;
 
-  const ClientID &my_client_id = gcs_client_->client_table().GetLocalClientId();
-
   // Resource accounting: acquire resources for the assigned task.
   auto acquired_resources =
       local_available_resources_.Acquire(spec.GetRequiredResources());
-  RAY_CHECK(
-      this->cluster_resource_map_[my_client_id].Acquire(spec.GetRequiredResources()));
+//  RAY_CHECK(
+//      this->cluster_resource_map_[my_client_id].Acquire(spec.GetRequiredResources()));
 
   if (spec.IsActorCreationTask()) {
     worker->SetLifetimeResourceIds(acquired_resources);
