@@ -121,6 +121,9 @@ class NodeManager {
   /// \return Void.
   void HeartbeatAdded(gcs::AsyncGcsClient *client, const ClientID &id,
                       const HeartbeatTableDataT &data);
+  /// Handler for a heartbeat batch notification from the GCS
+  void HeartbeatBatchAdded(gcs::AsyncGcsClient *client, const ClientID &client_id,
+                           const HeartbeatBatchTableDataT &heartbeat_batch);
 
   /// Methods for task scheduling.
 
@@ -386,6 +389,7 @@ class NodeManager {
   /// A mapping from actor ID to registration information about that actor
   /// (including which node manager owns it).
   std::unordered_map<ActorID, ActorRegistration> actor_registry_;
+
 };
 
 }  // namespace raylet
