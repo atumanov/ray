@@ -36,30 +36,38 @@ void ObjectStoreNotificationManager::NotificationWait() {
                                       this, boost::asio::placeholders::error));
 }
 
+
 void ObjectStoreNotificationManager::ProcessStoreLength(
     const boost::system::error_code &error) {
-  notification_.resize(length_);
-  boost::asio::async_read(
-      socket_, boost::asio::buffer(notification_),
-      boost::bind(&ObjectStoreNotificationManager::ProcessStoreNotification, this,
-                  boost::asio::placeholders::error));
-}
+  RAY_CHECK(!error);
+  int num_notifications = 0;
+  auto start = current_time_ms();
+  do {
+    notification_.resize(length_);
+    boost::asio::read(
+        socket_, boost::asio::buffer(notification_));
 
-void ObjectStoreNotificationManager::ProcessStoreNotification(
-    const boost::system::error_code &error) {
-  if (error.value() != boost::system::errc::success) {
-    RAY_LOG(FATAL) << boost_to_ray_status(error).ToString();
-  }
+    const auto &object_info = flatbuffers::GetRoot<ObjectInfo>(notification_.data());
+    const auto &object_id = from_flatbuf(*object_info->object_id());
+    //RAY_LOG(INFO) << object_id << " available at " << current_time_ms();
+    if (object_info->is_deletion()) {
+      ProcessStoreRemove(object_id);
+    } else {
+      ObjectInfoT result;
+      object_info->UnPackTo(&result);
+      ProcessStoreAdd(result);
+    }
+    num_notifications++;
 
-  const auto &object_info = flatbuffers::GetRoot<ObjectInfo>(notification_.data());
-  const auto &object_id = from_flatbuf(*object_info->object_id());
-  if (object_info->is_deletion()) {
-    ProcessStoreRemove(object_id);
-  } else {
-    ObjectInfoT result;
-    object_info->UnPackTo(&result);
-    ProcessStoreAdd(result);
-  }
+	if (current_time_ms() - start > 10) {
+      length_ = -1;
+    } else if (socket_.available() > 0) {
+      RAY_CHECK(boost::asio::read(socket_, boost::asio::buffer(&length_, sizeof(length_))) > 0);
+    } else {
+      length_ = -1;
+    }
+  } while (length_ > 0);
+
   NotificationWait();
 }
 
