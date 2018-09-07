@@ -1541,9 +1541,10 @@ ray::Status NodeManager::ForwardTask(const Task &task, const ClientID &node_id) 
 
   // Increment forward count for the forwarded task.
   lineage_cache_entry_task.IncrementNumForwards();
-  int64_t current_sys_time = current_sys_time_ms();
-  RAY_LOG(INFO) << "[ForwardTask] time spent on this raylet "
-      << (current_sys_time - lineage_cache_entry_task.GetTaskExecutionSpec().LastTimestamp());
+  int64_t time_before_write = current_sys_time_ms();
+  int64_t time_local_raylet =
+      lineage_cache_entry_task.GetTaskExecutionSpec().LastTimestamp() - time_before_write;
+  // Set the task's timestamp just before writing it to the socket.
   lineage_cache_entry_task.SetLastTimestamp(current_sys_time_ms());
 
   flatbuffers::FlatBufferBuilder fbb;
@@ -1568,6 +1569,12 @@ ray::Status NodeManager::ForwardTask(const Task &task, const ClientID &node_id) 
       static_cast<int64_t>(protocol::MessageType::ForwardTaskRequest), fbb.GetSize(),
       fbb.GetBufferPointer());
   if (status.ok()) {
+    // Get the amount of time it took to write the message.
+    int64_t time_after_write = current_sys_time_ms();
+    RAY_LOG(INFO) << "[ForwardTask] time spent on this raylet " << time_local_raylet
+        << " time spent writing: " << time_after_write - time_before_write
+        << " message size : " << fbb.GetSize() << " bytes.";
+
     // If we were able to forward the task, remove the forwarded task from the
     // lineage cache since the receiving node is now responsible for writing
     // the task to the GCS.
