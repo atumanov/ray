@@ -3,7 +3,7 @@ MAX_LINEAGE_SIZE=$2
 GCS_DELAY_MS=$3
 NUM_REDIS_SHARDS=$4
 
-export PATH=/home/ubuntu/anaconda3/bin/:$PATH
+export PATH=/home/ubuntu/miniconda3/bin/:$PATH
 
 ulimit -c unlimited
 ulimit -n 65536

@@ -7,6 +7,8 @@ USE_REDIS=${6:-0}
 USE_JSON=${7:-0}
 
 THROUGHPUT=150000
+NUM_PARSERS=1
+REDUCERS_PER_NODE=2
 
 LINEAGE_POLICY=1
 MAX_LINEAGE_SIZE=1
@@ -65,4 +67,4 @@ then
 fi
 
 
-python ~/ray/benchmark/stream/ysb_stream_bench.py --redis-address $HEAD_IP --num-nodes $NUM_RAYLETS --num-parsers 4 --target-throughput $THROUGHPUT --num-reducers $NUM_REDUCERS --exp-time $EXPERIMENT_TIME --num-reducers-per-node 2 $DUMP_ARG $REDIS_ADDRESS --output-filename $OUTPUT_FILENAME --actor-checkpointing $JSON_ARG
+python ~/ray/benchmark/stream/ysb_stream_bench.py --redis-address $HEAD_IP --num-nodes $NUM_RAYLETS --num-parsers $NUM_PARSERS --target-throughput $THROUGHPUT --num-reducers $NUM_REDUCERS --exp-time $EXPERIMENT_TIME --num-reducers-per-node $REDUCERS_PER_NODE $DUMP_ARG $REDIS_ADDRESS --output-filename $OUTPUT_FILENAME --actor-checkpointing $JSON_ARG

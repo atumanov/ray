@@ -5,7 +5,7 @@ MAX_LINEAGE_SIZE=1
 GCS_DELAY_MS=-1
 
 
-export PATH=/home/ubuntu/anaconda3/bin/:$PATH
+export PATH=/home/ubuntu/miniconda3/bin/:$PATH
 
 ray stop
 

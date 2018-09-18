@@ -7,7 +7,7 @@ GCS_DELAY_MS=$6
 SLEEP_TIME=${7:-$(( $RANDOM % 5 ))}
 
 
-export PATH=/home/ubuntu/anaconda3/bin/:$PATH
+export PATH=/home/ubuntu/miniconda3/bin/:$PATH
 
 ulimit -c unlimited
 ulimit -n 65536

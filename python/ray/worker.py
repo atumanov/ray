@@ -41,7 +41,7 @@ from ray.utils import (
     thread_safe_client,
 )
 
-S3_BUCKET_NAME = "actor-checkpoints"
+S3_BUCKET_NAME = "atumanov-actor-checkpoints"
 S3_CHECKPOINTING = True
 
 SCRIPT_MODE = 0

@@ -1,4 +1,4 @@
-export PATH=/home/ubuntu/anaconda3/bin/:$PATH
+export PATH=/home/ubuntu/miniconda3/bin/:$PATH
 
 ray stop
 rm -rf /tmp/raylogs/*
