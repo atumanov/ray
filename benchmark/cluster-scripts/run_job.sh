@@ -26,7 +26,7 @@ fi
 
 if [ $# -gt 7 ] || [ $# -eq 0 ]
 then
-    echo "Usage: ./run_jobs.sh <num raylets> <num shards> <num reducers> <experiment time> <gcs delay>"
+    echo "Usage: ./run_jobs.sh <num raylets> <num shards> <num reducers> <experiment time> <gcs delay> <use_redis> <use_json>"
     exit
 else
     echo "Logging output to $OUTPUT_FILENAME"
@@ -34,6 +34,7 @@ fi
 
 
 ./stop_cluster.sh
+echo "Starting cluster with ./start_cluster.sh $NUM_RAYLETS $LINEAGE_POLICY $MAX_LINEAGE_SIZE $GCS_DELAY_MS $NUM_REDIS_SHARDS"
 ./start_cluster.sh $NUM_RAYLETS $LINEAGE_POLICY $MAX_LINEAGE_SIZE $GCS_DELAY_MS $NUM_REDIS_SHARDS
 
 sleep 5

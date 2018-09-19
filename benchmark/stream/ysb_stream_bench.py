@@ -161,7 +161,8 @@ def submit_tasks_no_json(gen_dep, num_reducer_nodes, window_size):
     num_return_vals = 1
     for i in range(start_index, num_nodes):
         for _ in range(num_projectors_per_node):
-            batches = [task.returns()[0] for task in filtered[start_idx : start_idx + num_filter_in]]
+            #batches = [task.returns()[0] for task in filtered[start_idx : start_idx + num_filter_in]]
+            batches = filtered[start_idx : start_idx + num_filter_in]
             shuffled.append(project_shuffle_no_json._submit(
                 args=[num_projector_out, window_size] + batches,
                 num_return_vals=num_return_vals,
