@@ -435,6 +435,10 @@ void NodeManager::HeartbeatBatchAdded(const HeartbeatBatchTableDataT &heartbeat_
     const ClientID &client_id = task_client_pair.second;
     // (See design_docs/task_states.rst for the state transition diagram.)
     const auto task = local_queues_.RemoveTask(task_id);
+    RAY_LOG(INFO) << task_id << " --> " << client_id << " placement_resreq: "
+                  << task.GetTaskSpecification().GetRequiredPlacementResources().ToString()
+                  << " exec_resrec: " << task.GetTaskSpecification().GetRequiredResources().ToString()
+                  << " node_resources: " << cluster_resource_map_[client_id].GetTotalResources().ToString();
     // Since we are spilling back from the ready and waiting queues, we need
     // to unsubscribe the dependencies.
     task_dependency_manager_.UnsubscribeDependencies(task_id);
